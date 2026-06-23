@@ -1,0 +1,987 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
+<title>Jellybreak Lab — Hand-written 2D Physics</title>
+<style>
+  :root{
+    --panel: rgba(13,19,35,.72);
+    --text: rgba(244,248,255,.94);
+    --muted: rgba(216,228,255,.62);
+    --accent: #76e8ff;
+    --accent2:#b58cff;
+  }
+  *{box-sizing:border-box}
+  html,body{width:100%;height:100%;margin:0;overflow:hidden;background:#0b1020;font-family:Inter,ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:var(--text);}
+  canvas{position:fixed;inset:0;width:100%;height:100%;display:block;cursor:grab;touch-action:none}
+  canvas.dragging{cursor:grabbing}
+  .panel{
+    position:fixed;left:22px;top:22px;width:min(360px,calc(100vw - 44px));
+    border:1px solid rgba(255,255,255,.14);
+    background:linear-gradient(180deg,rgba(255,255,255,.10),rgba(255,255,255,.035)),var(--panel);
+    box-shadow:0 26px 80px rgba(0,0,0,.40), inset 0 1px 0 rgba(255,255,255,.18);
+    backdrop-filter: blur(20px) saturate(135%);
+    -webkit-backdrop-filter: blur(20px) saturate(135%);
+    border-radius:24px;padding:18px 18px 16px;user-select:none;z-index:5;
+  }
+  .brand{display:flex;align-items:center;gap:12px;margin-bottom:14px}
+  .mark{
+    width:42px;height:42px;border-radius:15px;
+    background:radial-gradient(circle at 30% 25%,#fff 0 9%,transparent 10%),
+      linear-gradient(135deg,#76e8ff,#9274ff 55%,#ff77c8);
+    box-shadow:0 10px 30px rgba(118,232,255,.24), inset 0 1px 2px rgba(255,255,255,.45);
+  }
+  .title{line-height:1}
+  .title b{font-size:15px;letter-spacing:.12em;text-transform:uppercase}
+  .title span{display:block;margin-top:5px;color:var(--muted);font-size:12px}
+  .row{display:flex;align-items:center;justify-content:space-between;gap:14px;margin:13px 0}
+  .label{font-size:12px;color:var(--muted);letter-spacing:.06em;text-transform:uppercase}
+  .value{font-variant-numeric:tabular-nums;color:#fff;font-size:13px}
+  .rangeWrap{position:relative;height:34px;display:flex;align-items:center;flex:1}
+  input[type=range]{
+    -webkit-appearance:none;appearance:none;width:100%;height:10px;border-radius:999px;outline:none;
+    background:linear-gradient(90deg,var(--accent) 0%,var(--accent2) var(--fill,54%),rgba(255,255,255,.12) var(--fill,54%));
+    box-shadow:inset 0 1px 4px rgba(0,0,0,.34),0 0 0 1px rgba(255,255,255,.08);
+  }
+  input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none;appearance:none;width:24px;height:24px;border-radius:50%;
+    background:radial-gradient(circle at 32% 28%,#fff,#dff9ff 30%,#70e6ff 62%,#7b68ff);
+    box-shadow:0 6px 18px rgba(118,232,255,.42),0 0 0 5px rgba(118,232,255,.13);
+    border:1px solid rgba(255,255,255,.55);cursor:pointer;
+  }
+  input[type=range]::-moz-range-thumb{
+    width:24px;height:24px;border-radius:50%;border:1px solid rgba(255,255,255,.55);
+    background:#76e8ff;box-shadow:0 6px 18px rgba(118,232,255,.42);cursor:pointer;
+  }
+  .buttons{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px}
+  button{
+    border:0;border-radius:16px;padding:12px 11px;color:white;font-weight:750;font-size:13px;letter-spacing:.01em;
+    background:linear-gradient(180deg,rgba(255,255,255,.18),rgba(255,255,255,.06)),rgba(255,255,255,.08);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.18),0 12px 28px rgba(0,0,0,.20);
+    cursor:pointer;transition:transform .16s ease,filter .16s ease,background .16s ease;
+  }
+  button:hover{transform:translateY(-1px);filter:brightness(1.12)}
+  button:active{transform:translateY(1px) scale(.99)}
+  button.primary{background:linear-gradient(135deg,#1fd4ff,#815cff 55%,#ff66be)}
+  .stats{margin-top:14px;display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .stat{border:1px solid rgba(255,255,255,.10);border-radius:16px;padding:10px 12px;background:rgba(0,0,0,.16)}
+  .stat .num{font-size:20px;font-weight:850;font-variant-numeric:tabular-nums}
+  .stat .cap{font-size:11px;color:var(--muted);margin-top:2px;text-transform:uppercase;letter-spacing:.08em}
+  .hint{
+    position:fixed;right:24px;bottom:22px;max-width:min(430px,calc(100vw - 48px));
+    color:rgba(238,246,255,.66);font-size:13px;line-height:1.45;text-align:right;
+    text-shadow:0 2px 14px rgba(0,0,0,.45);user-select:none;pointer-events:none;z-index:5;
+  }
+  @media(max-width:720px){
+    .panel{left:12px;top:12px;width:calc(100vw - 24px);border-radius:20px}
+    .hint{display:none}
+  }
+</style>
+</head>
+<body>
+<canvas id="world"></canvas>
+
+<section class="panel" aria-label="Physics controls">
+  <div class="brand">
+    <div class="mark"></div>
+    <div class="title">
+      <b>Jellybreak Lab</b>
+      <span>hand-written PBD physics · drag + throw anything</span>
+    </div>
+  </div>
+
+  <div class="row">
+    <div>
+      <div class="label">Gravity</div>
+      <div class="value"><span id="gRead">980</span> px/s²</div>
+    </div>
+    <div class="rangeWrap">
+      <input id="gravity" type="range" min="0" max="1800" value="980" />
+    </div>
+  </div>
+
+  <div class="buttons">
+    <button class="primary" id="addJelly">Add jelly</button>
+    <button id="dropRagdoll">Drop ragdoll</button>
+    <button id="rebuildWall">Rebuild wall</button>
+    <button id="reset">Reset</button>
+  </div>
+
+  <div class="stats">
+    <div class="stat"><div class="num" id="fps">60</div><div class="cap">FPS</div></div>
+    <div class="stat"><div class="num" id="bodies">0</div><div class="cap">Bodies</div></div>
+  </div>
+</section>
+
+<div class="hint">Click-drag any jelly, limb, head, or brick. Release to throw with real momentum. Fling something into the brick wall.</div>
+
+<script>
+(() => {
+'use strict';
+
+const canvas = document.getElementById('world');
+const ctx = canvas.getContext('2d', { alpha: false });
+
+let W = 0, H = 0, DPR = 1;
+const TAU = Math.PI * 2;
+const rand = (a,b)=>a+Math.random()*(b-a);
+const clamp = (v,a,b)=>v<a?a:v>b?b:v;
+const lerp = (a,b,t)=>a+(b-a)*t;
+const now = ()=>performance.now();
+const dist = (a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
+const floorY = ()=>H - 78;
+const leftWall = ()=>24;
+const rightWall = ()=>W - 24;
+const normAng = a => { while(a > Math.PI) a -= TAU; while(a < -Math.PI) a += TAU; return a; };
+
+function hexToRgb(hex){
+  hex = hex.replace('#','');
+  const n = parseInt(hex.length===3 ? hex.split('').map(c=>c+c).join('') : hex, 16);
+  return {r:(n>>16)&255,g:(n>>8)&255,b:n&255};
+}
+function mixHex(hex, amt){
+  const c = hexToRgb(hex);
+  const t = amt >= 0 ? 255 : 0;
+  const p = Math.abs(amt);
+  return `rgb(${Math.round(c.r+(t-c.r)*p)},${Math.round(c.g+(t-c.g)*p)},${Math.round(c.b+(t-c.b)*p)})`;
+}
+
+let particles = [];
+let constraints = [];
+let areas = [];
+let angleLimits = [];
+let shapeBodies = [];
+let entities = [];
+let bricks = [];
+let jellies = [];
+let ragdolls = [];
+let dust = [];
+let pid = 1, eid = 1;
+
+let gravity = 980;
+const MAX_SPEED = 1850;
+const CELL = 46;
+const SUBSTEPS = 4;
+const ITERS = 5;
+const grid = new Map();
+let simTime = 0;
+let shake = 0;
+let burstBudget = 0;
+
+const mats = {
+  jelly: { mu:.36, damp:.9990 },
+  brick: { mu:.86, damp:.9978 },
+  rag:   { mu:.66, damp:.9982 },
+  core:  { mu:.50, damp:.9988 }
+};
+
+class Particle {
+  constructor(x,y,r,mass,entity,mat='jelly',collide=true){
+    this.id = pid++;
+    this.x = x; this.y = y;
+    this.oldX = x; this.oldY = y;
+    this.vx = 0; this.vy = 0;
+    this.r = r;
+    this.inv = mass > 0 ? 1 / mass : 0;
+    this.entity = entity || null;
+    this.mat = mat;
+    this.collide = collide;
+  }
+}
+
+class DistanceConstraint {
+  constructor(a,b,rest,stiff,entity=null){ this.a=a; this.b=b; this.rest=rest; this.stiff=stiff; this.entity=entity; }
+  solve(){
+    const a=this.a,b=this.b;
+    let dx=b.x-a.x, dy=b.y-a.y;
+    let d=Math.hypot(dx,dy);
+    if(d < 1e-6) return;
+    const w=a.inv+b.inv;
+    if(w <= 0) return;
+    const diff=(d-this.rest)/d;
+    const s=this.stiff / w;
+    const cx=dx*diff*s, cy=dy*diff*s;
+    if(a.inv){ a.x += cx*a.inv; a.y += cy*a.inv; }
+    if(b.inv){ b.x -= cx*b.inv; b.y -= cy*b.inv; }
+  }
+}
+
+function polygonArea(ps){
+  let a=0,n=ps.length;
+  for(let i=0;i<n;i++){ const p=ps[i], q=ps[(i+1)%n]; a += p.x*q.y - q.x*p.y; }
+  return a*.5;
+}
+
+class AreaConstraint {
+  constructor(points,stiff,entity=null){ this.points=points; this.stiff=stiff; this.entity=entity; this.rest=polygonArea(points); }
+  solve(){
+    const pts=this.points, n=pts.length;
+    const C=polygonArea(pts)-this.rest;
+    if(Math.abs(C) < .0001) return;
+    let denom=0;
+    const gx=new Array(n), gy=new Array(n);
+    for(let i=0;i<n;i++){
+      const prev=pts[(i+n-1)%n], next=pts[(i+1)%n], p=pts[i];
+      gx[i]=.5*(next.y-prev.y); gy[i]=.5*(prev.x-next.x);
+      denom += p.inv*(gx[i]*gx[i]+gy[i]*gy[i]);
+    }
+    if(denom < 1e-7) return;
+    const lambda = (C/denom)*this.stiff;
+    for(let i=0;i<n;i++){
+      const p=pts[i];
+      if(!p.inv) continue;
+      p.x -= p.inv*lambda*gx[i];
+      p.y -= p.inv*lambda*gy[i];
+    }
+  }
+}
+
+function rotateAround(p,o,ang){
+  if(!p.inv || Math.abs(ang)<1e-8) return;
+  const s=Math.sin(ang), c=Math.cos(ang);
+  const x=p.x-o.x, y=p.y-o.y;
+  p.x=o.x+x*c-y*s; p.y=o.y+x*s+y*c;
+}
+
+class AngleLimit {
+  constructor(a,b,c,minDeg,maxDeg,stiff,entity=null){
+    this.a=a; this.b=b; this.c=c;
+    this.min=minDeg*Math.PI/180; this.max=maxDeg*Math.PI/180;
+    this.stiff=stiff; this.entity=entity;
+  }
+  solve(){
+    const a=this.a,b=this.b,c=this.c;
+    const ax=a.x-b.x, ay=a.y-b.y, cx=c.x-b.x, cy=c.y-b.y;
+    if((ax*ax+ay*ay)<16 || (cx*cx+cy*cy)<16) return;
+    const diff=normAng(Math.atan2(cy,cx)-Math.atan2(ay,ax));
+    const ad=Math.abs(diff);
+    const target=clamp(ad,this.min,this.max);
+    const err=ad-target;
+    if(Math.abs(err)<.002) return;
+    const sign=diff>=0?1:-1;
+    const corr=err*sign*this.stiff;
+    const wa=a.inv, wc=c.inv, sum=wa+wc;
+    if(sum<=0) return;
+    rotateAround(a,b, corr*(wa/sum));
+    rotateAround(c,b,-corr*(wc/sum));
+  }
+}
+
+class ShapeMatchBody {
+  constructor(entity, points, locals, stiffness=.85){
+    this.entity=entity; this.points=points; this.locals=locals; this.stiffness=stiffness;
+  }
+  solve(){
+    const ps=this.points, qs=this.locals;
+    let mx=0,my=0,mt=0;
+    for(let i=0;i<ps.length;i++){
+      const p=ps[i]; const m=p.inv ? 1/p.inv : 0;
+      mx += p.x*m; my += p.y*m; mt += m;
+    }
+    if(mt <= 0) return;
+    const cx=mx/mt, cy=my/mt;
+    let a00=0,a01=0,a10=0,a11=0;
+    for(let i=0;i<ps.length;i++){
+      const p=ps[i], q=qs[i]; const m=p.inv ? 1/p.inv : 0;
+      const px=p.x-cx, py=p.y-cy;
+      a00 += m*px*q.x; a01 += m*px*q.y;
+      a10 += m*py*q.x; a11 += m*py*q.y;
+    }
+    const ang=Math.atan2(a10-a01, a00+a11);
+    const co=Math.cos(ang), si=Math.sin(ang);
+    const k=this.stiffness;
+    for(let i=0;i<ps.length;i++){
+      const p=ps[i], q=qs[i];
+      if(!p.inv) continue;
+      const tx=cx+co*q.x-si*q.y;
+      const ty=cy+si*q.x+co*q.y;
+      p.x += (tx-p.x)*k; p.y += (ty-p.y)*k;
+    }
+    this.entity.cx=cx; this.entity.cy=cy; this.entity.angle=ang;
+  }
+}
+
+function addParticle(p){ particles.push(p); return p; }
+function addConstraint(c){ constraints.push(c); return c; }
+function addArea(a){ areas.push(a); return a; }
+function addAngle(a){ angleLimits.push(a); return a; }
+
+const jellyPalette = ['#36e0ff','#9b7bff','#ff62bd','#53f29f','#ffc84d'];
+
+function createJelly(x,y,r,color){
+  color = color || jellyPalette[Math.floor(Math.random()*jellyPalette.length)];
+  const e = { id:eid++, type:'jelly', particles:[], ring:[], color,
+    light:mixHex(color,.5), dark:mixHex(color,-.34), created:simTime };
+  entities.push(e); jellies.push(e);
+
+  const n = 16;
+  const pr = clamp(r*.24, 9, 12.5);
+  const center = addParticle(new Particle(x,y, r*.3, 1.3, e, 'core', false));
+  e.center = center; e.particles.push(center);
+
+  for(let i=0;i<n;i++){
+    const a=i*TAU/n;
+    const rr=r*(.98 + rand(-.02,.02));
+    const p=addParticle(new Particle(x+Math.cos(a)*rr, y+Math.sin(a)*rr, pr, .7, e, 'jelly', true));
+    p.vx=rand(-15,15); p.vy=rand(-15,15);
+    e.ring.push(p); e.particles.push(p);
+  }
+  for(let i=0;i<n;i++){
+    const p=e.ring[i], q=e.ring[(i+1)%n], q2=e.ring[(i+2)%n], opp=e.ring[(i+(n>>1))%n];
+    addConstraint(new DistanceConstraint(p,q,dist(p,q),.55,e));
+    addConstraint(new DistanceConstraint(p,q2,dist(p,q2),.28,e));
+    addConstraint(new DistanceConstraint(center,p,r,.16,e));
+    if(i < n/2) addConstraint(new DistanceConstraint(p,opp,r*2,.06,e));
+  }
+  addArea(new AreaConstraint(e.ring,.4,e));
+  return e;
+}
+
+function createBrick(x,y,w,h,ang=0){
+  const tt=rand(-9,9);
+  const e = { id:eid++, type:'brick', particles:[], local:[], w,h, cx:x, cy:y, angle:ang,
+    col1:`hsl(${28+tt},55%,64%)`, col2:`hsl(${21+tt},50%,46%)`, col3:`hsl(${15+tt},48%,30%)`, cracks:[] };
+  entities.push(e); bricks.push(e);
+
+  const r = 8;
+  const xs = [-w/2+r, -w*0.22, 0, w*0.22, w/2-r];
+  const local = [];
+  for(const xx of xs) local.push({x:xx,y:-h/2+r});
+  local.push({x:w/2-r,y:0});
+  for(let i=xs.length-1;i>=0;i--) local.push({x:xs[i],y:h/2-r});
+  local.push({x:-w/2+r,y:0});
+
+  const co=Math.cos(ang), si=Math.sin(ang);
+  const massEach = 8.5/local.length;
+  for(const q of local){
+    const px=x+co*q.x-si*q.y, py=y+si*q.x+co*q.y;
+    e.particles.push(addParticle(new Particle(px,py,r,massEach,e,'brick',true)));
+    e.local.push({x:q.x,y:q.y});
+  }
+  e.shape = new ShapeMatchBody(e,e.particles,e.local,.85);
+  shapeBodies.push(e.shape);
+
+  for(let i=0;i<4;i++){
+    const ccx=rand(-w*.34,w*.34), ccy=rand(-h*.28,h*.28);
+    const a=rand(-.7,.7), l=rand(7,15), ca=Math.cos(a), sa=Math.sin(a);
+    const pt=(lx,ly)=>[ccx+(ca*lx-sa*ly), ccy+(sa*lx+ca*ly)];
+    e.cracks.push({ pts:[ pt(-l*.5,0), pt(l*.1,rand(-1.5,1.5)), pt(l*.5,rand(-3,3)) ], o:rand(.10,.20) });
+  }
+  return e;
+}
+
+function createRagdoll(x,y,s=1){
+  const e={id:eid++,type:'ragdoll',particles:[], p:{}, bones:[]};
+  entities.push(e); ragdolls.push(e);
+  const P=(name,dx,dy,r,m=.72)=>{
+    const p=addParticle(new Particle(x+dx*s,y+dy*s,r*s,m,e,'rag',true));
+    p.vx=rand(-18,18); p.vy=rand(-12,12);
+    e.p[name]=p; e.particles.push(p); return p;
+  };
+  P('head',0,-61,16,1.0); P('neck',0,-36,9,.8); P('chest',0,-10,11,1.0); P('pelvis',0,30,12,1.1);
+  P('ls',-24,-28,9,.72); P('rs',24,-28,9,.72); P('lh',-16,30,10,.85); P('rh',16,30,10,.85);
+  P('le',-48,2,8,.62); P('re',48,2,8,.62); P('lhand',-62,34,8,.55); P('rhand',62,34,8,.55);
+  P('lk',-25,78,9,.75); P('rk',25,78,9,.75); P('lf',-29,124,9,.62); P('rf',29,124,9,.62);
+
+  const d=(a,b,k=.82)=>addConstraint(new DistanceConstraint(e.p[a],e.p[b],dist(e.p[a],e.p[b]),k,e));
+  d('head','neck',.58); d('neck','chest',.8); d('chest','pelvis',.82);
+  d('ls','rs',.88); d('lh','rh',.88); d('ls','lh',.74); d('rs','rh',.74);
+  d('ls','chest',.82); d('rs','chest',.82); d('lh','pelvis',.8); d('rh','pelvis',.8);
+  d('ls','rh',.55); d('rs','lh',.55); d('neck','ls',.78); d('neck','rs',.78);
+  d('ls','le',.8); d('le','lhand',.78); d('rs','re',.8); d('re','rhand',.78);
+  d('lh','lk',.82); d('lk','lf',.82); d('rh','rk',.82); d('rk','rf',.82);
+
+  const al=(a,b,c,mn,mx,k=.2)=>addAngle(new AngleLimit(e.p[a],e.p[b],e.p[c],mn,mx,k,e));
+  al('ls','le','lhand',18,168,.22); al('rs','re','rhand',18,168,.22);
+  al('lh','lk','lf',12,172,.22); al('rh','rk','rf',12,172,.22);
+  al('neck','ls','le',34,174,.14); al('neck','rs','re',34,174,.14);
+  al('chest','lh','lk',28,168,.14); al('chest','rh','rk',28,168,.14);
+  al('head','neck','chest',132,180,.11);
+
+  e.bones = [
+    ['ls','le',17],['le','lhand',15],['rs','re',17],['re','rhand',15],
+    ['lh','lk',19],['lk','lf',17],['rh','rk',19],['rk','rf',17]
+  ];
+  return e;
+}
+
+function rebuildWall(){
+  for(const b of bricks) b.dead=true;
+  cleanupDead();
+  const bw=64, bh=28;
+  const cols = W < 760 ? 4 : W < 1000 ? 5 : 6;
+  const rows = 5;
+  const total = cols*bw + bw*.5;
+  const baseX = clamp(Math.min(W*.64, W-total-42), 72, Math.max(74, W-cols*bw-34));
+  const baseY = floorY() - bh/2 - .5;
+  for(let r=0;r<rows;r++){
+    for(let c=0;c<cols;c++){
+      const offset = (r%2)*bw*.5;
+      const x = baseX + c*bw + offset;
+      if(x > W-74) continue;
+      createBrick(x, baseY - r*bh, bw-2, bh-1, rand(-.006,.006));
+    }
+  }
+}
+
+function cleanupDead(){
+  particles = particles.filter(p=>!p.entity || !p.entity.dead);
+  constraints = constraints.filter(c=>!c.entity || !c.entity.dead);
+  areas = areas.filter(a=>!a.entity || !a.entity.dead);
+  angleLimits = angleLimits.filter(a=>!a.entity || !a.entity.dead);
+  shapeBodies = shapeBodies.filter(s=>!s.entity.dead);
+  entities = entities.filter(e=>!e.dead);
+  jellies = jellies.filter(e=>!e.dead);
+  ragdolls = ragdolls.filter(e=>!e.dead);
+  bricks = bricks.filter(e=>!e.dead);
+}
+
+function resetWorld(){
+  particles=[]; constraints=[]; areas=[]; angleLimits=[]; shapeBodies=[];
+  entities=[]; bricks=[]; jellies=[]; ragdolls=[]; dust=[]; pid=1; eid=1; shake=0;
+  const fy=floorY();
+  createJelly(W*.18, fy-260, 44, '#36e0ff');
+  createJelly(W*.30, fy-150, 40, '#ff62bd');
+  createJelly(W*.14, fy-80, 48, '#53f29f');
+  createRagdoll(W*.40, fy-240, 1);
+  rebuildWall();
+}
+
+function addRandomJelly(){
+  if(particles.length>1100) return;
+  const fy=floorY();
+  createJelly(rand(W*.12,Math.max(140,W*.5)), rand(90,Math.max(140,fy-280)), rand(34,48));
+}
+function dropRagdoll(){
+  if(particles.length>1100) return;
+  createRagdoll(rand(W*.15,Math.max(190,W*.55)), 100, rand(.92,1.08));
+}
+
+function resize(){
+  DPR = Math.min(window.devicePixelRatio || 1, 2);
+  W = innerWidth; H = innerHeight;
+  canvas.width = Math.floor(W*DPR); canvas.height = Math.floor(H*DPR);
+  canvas.style.width = W+'px'; canvas.style.height = H+'px';
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+  for(const p of particles){
+    p.x = clamp(p.x,leftWall()+p.r,rightWall()-p.r);
+    if(p.y+p.r>floorY()) p.y = floorY()-p.r;
+  }
+  if(!entities.length) resetWorld();
+}
+addEventListener('resize', resize);
+
+function integrate(dt){
+  for(const p of particles){
+    p.oldX=p.x; p.oldY=p.y;
+    if(!p.inv) continue;
+    const m=mats[p.mat] || mats.jelly;
+    p.vy += gravity*dt;
+    p.vx *= m.damp; p.vy *= m.damp;
+    const sp=Math.hypot(p.vx,p.vy);
+    if(sp > MAX_SPEED){ const sc=MAX_SPEED/sp; p.vx*=sc; p.vy*=sc; }
+    p.x += p.vx*dt; p.y += p.vy*dt;
+  }
+}
+
+function detectFloorImpacts(){
+  const fy=floorY();
+  for(const p of particles){
+    if(!p.inv || !p.collide) continue;
+    if(p.y+p.r > fy && p.vy > 560 && burstBudget>0){
+      const power=clamp(p.vy/1500,0,1);
+      spawnDust(p.x, fy-3, 7+power*18, p.mat==='jelly'?'soft':'brick');
+      shake=Math.min(14, Math.max(shake, 3+power*8));
+      burstBudget--;
+    }
+  }
+}
+
+function clampBounds(){
+  const fy=floorY(), lw=leftWall(), rw=rightWall();
+  for(const p of particles){
+    if(!p.inv) continue;
+    if(p.y+p.r > fy) p.y = fy-p.r;
+    if(p.x-p.r < lw) p.x = lw+p.r;
+    else if(p.x+p.r > rw) p.x = rw-p.r;
+    if(p.y-p.r < 12) p.y = 12+p.r;
+  }
+}
+
+function buildGrid(){
+  grid.clear();
+  for(const p of particles){
+    if(!p.collide || !p.inv) continue;
+    const key=Math.floor(p.x/CELL)+','+Math.floor(p.y/CELL);
+    let arr=grid.get(key);
+    if(!arr){ arr=[]; grid.set(key,arr); }
+    arr.push(p);
+  }
+}
+
+function solveParticleCollisions(){
+  buildGrid();
+  for(const p of particles){
+    if(!p.collide || !p.inv) continue;
+    const gx=Math.floor(p.x/CELL), gy=Math.floor(p.y/CELL);
+    for(let yy=gy-1; yy<=gy+1; yy++){
+      for(let xx=gx-1; xx<=gx+1; xx++){
+        const arr=grid.get(xx+','+yy);
+        if(!arr) continue;
+        for(const q of arr){
+          if(q.id <= p.id || !q.collide || p.entity===q.entity) continue;
+          collidePair(p,q);
+        }
+      }
+    }
+  }
+}
+
+function collidePair(a,b){
+  let dx=b.x-a.x, dy=b.y-a.y;
+  let d2=dx*dx+dy*dy;
+  const min=a.r+b.r;
+  if(d2 >= min*min) return;
+  let d=Math.sqrt(d2);
+  if(d < 1e-6){ const an=rand(0,TAU); dx=Math.cos(an); dy=Math.sin(an); d=0.001; }
+  const nx=dx/d, ny=dy/d;
+  const pen=min-d;
+  const w=a.inv+b.inv;
+  if(w<=0) return;
+
+  const corr = Math.max(0,pen-.01)*.8/w;
+  if(a.inv){ a.x -= nx*corr*a.inv; a.y -= ny*corr*a.inv; }
+  if(b.inv){ b.x += nx*corr*b.inv; b.y += ny*corr*b.inv; }
+
+  const tx=-ny, ty=nx;
+  const rmx=(b.x-b.oldX)-(a.x-a.oldX);
+  const rmy=(b.y-b.oldY)-(a.y-a.oldY);
+  const vt=rmx*tx+rmy*ty;
+  const ma=mats[a.mat]||mats.jelly, mb=mats[b.mat]||mats.jelly;
+  const mu=Math.min(.92,(ma.mu+mb.mu)*.5);
+  const maxT=pen*mu*.55 + .035;
+  const take=clamp(vt,-maxT,maxT)*.58/w;
+  if(a.inv){ a.x += tx*take*a.inv; a.y += ty*take*a.inv; }
+  if(b.inv){ b.x -= tx*take*b.inv; b.y -= ty*take*b.inv; }
+
+  const closing=-((b.vx-a.vx)*nx+(b.vy-a.vy)*ny);
+  if(closing > 380 && burstBudget>0){
+    const cx=(a.x+b.x)*.5, cy=(a.y+b.y)*.5;
+    spawnDust(cx,cy,Math.min(26,closing/40), (a.mat==='brick'||b.mat==='brick')?'brick':'soft');
+    shake=Math.min(14,Math.max(shake,Math.min(11,closing/110)));
+    burstBudget--;
+  }
+}
+
+function solveGrab(dt){
+  if(!grab.p) return;
+  const p=grab.p;
+  const k = p.mat==='brick' ? .35 : p.mat==='rag' ? .4 : .45;
+  const dx=pointer.x-p.x, dy=pointer.y-p.y;
+  p.x += dx*k; p.y += dy*k;
+  p.oldX = p.x - pointer.vx*dt;
+  p.oldY = p.y - pointer.vy*dt;
+  const e=p.entity;
+  if(e && e.type==='brick'){
+    for(const q of e.particles){ if(q===p) continue; q.x += dx*.02; q.y += dy*.02; }
+  }
+}
+
+function applyContactFriction(){
+  const fy=floorY();
+  for(const p of particles){
+    if(!p.inv) continue;
+    if(p.y+p.r > fy-0.5){
+      const mu=(mats[p.mat]||mats.jelly).mu;
+      const slip=p.x-p.oldX;
+      p.x = p.oldX + slip*(1-mu*0.5);
+    }
+  }
+}
+
+function finalizeVelocities(dt){
+  const fy=floorY();
+  for(const p of particles){
+    if(!p.inv) continue;
+    let vx=(p.x-p.oldX)/dt, vy=(p.y-p.oldY)/dt;
+    const sp=Math.hypot(vx,vy);
+    if(sp>MAX_SPEED){ const s=MAX_SPEED/sp; vx*=s; vy*=s; }
+    if(vx*vx+vy*vy < 28){ vx*=0.4; vy*=0.4; }
+    if(p.y+p.r > fy-0.6 && Math.abs(vy)<16) vy=0;
+    if(Math.abs(vx)<0.4) vx=0;
+    if(Math.abs(vy)<0.4) vy=0;
+    p.vx=vx; p.vy=vy;
+  }
+}
+
+function physicsStep(dt){
+  simTime += dt;
+  integrate(dt);
+  detectFloorImpacts();
+  for(let it=0; it<ITERS; it++){
+    for(const c of constraints) c.solve();
+    for(const a of areas) a.solve();
+    for(const s of shapeBodies) s.solve();
+    for(const al of angleLimits) al.solve();
+    solveGrab(dt);
+    clampBounds();
+    solveParticleCollisions();
+    clampBounds();
+  }
+  applyContactFriction();
+  finalizeVelocities(dt);
+  updateDust(dt);
+}
+
+function updateDust(dt){
+  for(const d of dust){
+    d.life -= dt;
+    d.vy += gravity*.25*dt;
+    d.vx *= Math.pow(.22,dt); d.vy *= Math.pow(.40,dt);
+    d.x += d.vx*dt; d.y += d.vy*dt;
+  }
+  dust = dust.filter(d=>d.life>0);
+}
+function spawnDust(x,y,count,type){
+  count = Math.floor(count);
+  const brick = type==='brick';
+  for(let i=0;i<count;i++){
+    const ang=rand(-Math.PI,0), sp=rand(40,250)*(brick?1.1:.8);
+    dust.push({
+      x:x+rand(-7,7), y:y+rand(-4,4),
+      vx:Math.cos(ang)*sp+rand(-40,40), vy:Math.sin(ang)*sp-rand(10,70),
+      r:rand(1.4,4.6)*(brick?1:.8),
+      life:rand(.35,.95), max:0, glow:!brick,
+      color:brick ? `rgba(${Math.floor(rand(172,212))},${Math.floor(rand(112,142))},${Math.floor(rand(72,94))},`
+                  : `rgba(${Math.floor(rand(160,220))},${Math.floor(rand(230,255))},255,`
+    });
+  }
+  for(const d of dust) if(!d.max) d.max=d.life;
+  if(dust.length>420) dust.splice(0,dust.length-420);
+}
+
+const pointer={x:0,y:0,vx:0,vy:0,t:0,down:false};
+const grab={p:null};
+function pointerXY(e){ const r=canvas.getBoundingClientRect(); return {x:e.clientX-r.left,y:e.clientY-r.top}; }
+canvas.addEventListener('pointerdown', e=>{
+  const q=pointerXY(e);
+  pointer.x=q.x; pointer.y=q.y; pointer.vx=0; pointer.vy=0; pointer.t=now(); pointer.down=true;
+  const hit=hitTest(q.x,q.y);
+  if(hit){ grab.p=hit; canvas.classList.add('dragging'); try{canvas.setPointerCapture(e.pointerId);}catch(_){} }
+});
+canvas.addEventListener('pointermove', e=>{
+  const q=pointerXY(e);
+  const t=now(), dt=Math.max(.006,(t-pointer.t)/1000);
+  const vx=clamp((q.x-pointer.x)/dt,-MAX_SPEED,MAX_SPEED);
+  const vy=clamp((q.y-pointer.y)/dt,-MAX_SPEED,MAX_SPEED);
+  pointer.vx=lerp(pointer.vx,vx,.5); pointer.vy=lerp(pointer.vy,vy,.5);
+  pointer.x=q.x; pointer.y=q.y; pointer.t=t;
+});
+function releasePointer(e){
+  if(grab.p){
+    const p=grab.p, b=p.entity;
+    const vx=clamp(pointer.vx,-MAX_SPEED,MAX_SPEED), vy=clamp(pointer.vy,-MAX_SPEED,MAX_SPEED);
+    if(b){
+      const ty=b.type;
+      for(const q of b.particles){
+        const w = q===p ? 1 : ty==='brick' ? .7 : ty==='ragdoll' ? .5 : .36;
+        q.vx = q.vx*.2 + vx*w; q.vy = q.vy*.2 + vy*w;
+      }
+    } else { p.vx=vx; p.vy=vy; }
+    if(Math.hypot(vx,vy)>520) spawnDust(p.x,p.y,10,'soft');
+  }
+  grab.p=null; pointer.down=false; canvas.classList.remove('dragging');
+  if(e && e.pointerId!=null){ try{canvas.releasePointerCapture(e.pointerId);}catch(_){} }
+}
+canvas.addEventListener('pointerup', releasePointer);
+canvas.addEventListener('pointercancel', releasePointer);
+
+function pointInPoly(x,y,pts){
+  let inside=false;
+  for(let i=0,j=pts.length-1;i<pts.length;j=i++){
+    const a=pts[i], b=pts[j];
+    if(((a.y>y)!==(b.y>y)) && x < (b.x-a.x)*(y-a.y)/(b.y-a.y)+a.x) inside=!inside;
+  }
+  return inside;
+}
+function distSeg(px,py,a,b){
+  const dx=b.x-a.x, dy=b.y-a.y;
+  const l2=dx*dx+dy*dy || 1;
+  const t=clamp(((px-a.x)*dx+(py-a.y)*dy)/l2,0,1);
+  return {d:Math.hypot(px-(a.x+dx*t),py-(a.y+dy*t)), t};
+}
+function pointInBrick(x,y,e){
+  const co=Math.cos(-e.angle), si=Math.sin(-e.angle);
+  const dx=x-e.cx, dy=y-e.cy;
+  const lx=co*dx-si*dy, ly=si*dx+co*dy;
+  return Math.abs(lx)<=e.w/2+8 && Math.abs(ly)<=e.h/2+8;
+}
+function nearestParticle(list,x,y){
+  let best=null, bd=1e9;
+  for(const p of list){ const d=Math.hypot(p.x-x,p.y-y); if(d<bd){bd=d; best=p;} }
+  return best;
+}
+function hitTest(x,y){
+  for(let i=jellies.length-1;i>=0;i--){ const e=jellies[i]; if(pointInPoly(x,y,e.ring)) return nearestParticle(e.ring,x,y); }
+  for(let i=ragdolls.length-1;i>=0;i--){
+    const e=ragdolls[i];
+    for(const b of e.bones){ const d=distSeg(x,y,e.p[b[0]],e.p[b[1]]); if(d.d < b[2]+10) return d.t<.5 ? e.p[b[0]] : e.p[b[1]]; }
+    if(Math.hypot(x-e.p.head.x,y-e.p.head.y)<26) return e.p.head;
+  }
+  for(let i=bricks.length-1;i>=0;i--){ const e=bricks[i]; if(pointInBrick(x,y,e)) return nearestParticle(e.particles,x,y); }
+  let best=null, bd=30;
+  for(const p of particles){ if(!p.collide) continue; const d=Math.hypot(p.x-x,p.y-y)-p.r; if(d<bd){bd=d; best=p;} }
+  return best;
+}
+
+function drawBackground(){
+  const g=ctx.createLinearGradient(0,0,0,H);
+  g.addColorStop(0,'#131a33'); g.addColorStop(.55,'#0b1328'); g.addColorStop(1,'#080b16');
+  ctx.fillStyle=g; ctx.fillRect(-40,-40,W+80,H+80);
+
+  const rg=ctx.createRadialGradient(W*.35,H*.2,0,W*.35,H*.2,Math.max(W,H)*.86);
+  rg.addColorStop(0,'rgba(91,128,255,.24)'); rg.addColorStop(.45,'rgba(17,23,48,0)'); rg.addColorStop(1,'rgba(0,0,0,.46)');
+  ctx.fillStyle=rg; ctx.fillRect(-40,-40,W+80,H+80);
+
+  ctx.save();
+  ctx.globalAlpha=.22; ctx.strokeStyle='rgba(255,255,255,.045)'; ctx.lineWidth=1;
+  const gap=64;
+  for(let x=((W*.5)%gap)-gap; x<W+gap; x+=gap){ ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x+H*.32,H); ctx.stroke(); }
+  ctx.restore();
+}
+
+function drawStage(){
+  const fy=floorY();
+  const fg=ctx.createLinearGradient(0,fy-26,0,H);
+  fg.addColorStop(0,'rgba(150,190,255,.16)'); fg.addColorStop(.24,'rgba(255,255,255,.08)'); fg.addColorStop(1,'rgba(0,0,0,.36)');
+  ctx.fillStyle=fg; ctx.fillRect(-40,fy,W+80,H-fy+40);
+  ctx.strokeStyle='rgba(225,241,255,.22)'; ctx.lineWidth=2;
+  ctx.beginPath(); ctx.moveTo(leftWall(),fy+.5); ctx.lineTo(rightWall(),fy+.5); ctx.stroke();
+
+  ctx.save();
+  ctx.strokeStyle='rgba(225,241,255,.12)'; ctx.lineWidth=2;
+  ctx.beginPath();
+  ctx.moveTo(leftWall()-.5,28); ctx.lineTo(leftWall()-.5,fy);
+  ctx.moveTo(rightWall()+.5,28); ctx.lineTo(rightWall()+.5,fy);
+  ctx.stroke();
+  ctx.restore();
+
+  const refl=ctx.createLinearGradient(0,fy,0,fy+90);
+  refl.addColorStop(0,'rgba(118,232,255,.10)'); refl.addColorStop(1,'rgba(118,232,255,0)');
+  ctx.fillStyle=refl; ctx.fillRect(-40,fy,W+80,95);
+}
+
+function jellyPath(ring){
+  const n=ring.length;
+  const p0=ring[0], p1=ring[1];
+  ctx.beginPath();
+  ctx.moveTo((p0.x+p1.x)/2,(p0.y+p1.y)/2);
+  for(let i=1;i<=n;i++){
+    const p=ring[i%n], q=ring[(i+1)%n];
+    ctx.quadraticCurveTo(p.x,p.y,(p.x+q.x)/2,(p.y+q.y)/2);
+  }
+  ctx.closePath();
+}
+function drawJelly(e){
+  let cx=0,cy=0;
+  for(const p of e.ring){cx+=p.x;cy+=p.y;}
+  cx/=e.ring.length; cy/=e.ring.length;
+  let rr=0;
+  for(const p of e.ring) rr+=Math.hypot(p.x-cx,p.y-cy);
+  rr/=e.ring.length;
+
+  ctx.save();
+  ctx.shadowColor='rgba(0,0,0,.38)'; ctx.shadowBlur=24; ctx.shadowOffsetY=16;
+  jellyPath(e.ring);
+  const g=ctx.createRadialGradient(cx-rr*.35,cy-rr*.45,rr*.15,cx,cy,rr*1.34);
+  g.addColorStop(0,e.light); g.addColorStop(.48,e.color); g.addColorStop(1,e.dark);
+  ctx.fillStyle=g; ctx.fill();
+  ctx.shadowColor='transparent';
+  ctx.lineWidth=2; ctx.strokeStyle='rgba(255,255,255,.32)'; ctx.stroke();
+
+  jellyPath(e.ring); ctx.clip();
+  const hi=ctx.createRadialGradient(cx-rr*.38,cy-rr*.55,1,cx-rr*.38,cy-rr*.55,rr*.72);
+  hi.addColorStop(0,'rgba(255,255,255,.52)'); hi.addColorStop(.36,'rgba(255,255,255,.18)'); hi.addColorStop(1,'rgba(255,255,255,0)');
+  ctx.fillStyle=hi;
+  ctx.beginPath(); ctx.ellipse(cx-rr*.28,cy-rr*.38,rr*.48,rr*.23,-.45,0,TAU); ctx.fill();
+
+  ctx.globalAlpha=.13; ctx.strokeStyle='white'; ctx.lineWidth=1;
+  for(let i=0;i<e.ring.length;i+=2){
+    const p=e.ring[i];
+    ctx.beginPath(); ctx.moveTo(cx,cy); ctx.lineTo(p.x,p.y); ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function roundRectPath(x,y,w,h,r){
+  r=Math.min(r,w/2,h/2);
+  ctx.beginPath();
+  ctx.moveTo(x+r,y); ctx.lineTo(x+w-r,y); ctx.quadraticCurveTo(x+w,y,x+w,y+r);
+  ctx.lineTo(x+w,y+h-r); ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);
+  ctx.lineTo(x+r,y+h); ctx.quadraticCurveTo(x,y+h,x,y+h-r);
+  ctx.lineTo(x,y+r); ctx.quadraticCurveTo(x,y,x+r,y); ctx.closePath();
+}
+function drawBrick(e){
+  ctx.save();
+  ctx.translate(e.cx,e.cy); ctx.rotate(e.angle);
+  ctx.shadowColor='rgba(0,0,0,.32)'; ctx.shadowBlur=14; ctx.shadowOffsetY=8;
+  roundRectPath(-e.w/2,-e.h/2,e.w,e.h,5);
+  const g=ctx.createLinearGradient(-e.w/2,-e.h/2,e.w/2,e.h/2);
+  g.addColorStop(0,e.col1); g.addColorStop(.5,e.col2); g.addColorStop(1,e.col3);
+  ctx.fillStyle=g; ctx.fill();
+  ctx.shadowColor='transparent';
+  ctx.strokeStyle='rgba(255,236,210,.22)'; ctx.lineWidth=1.2; ctx.stroke();
+
+  ctx.globalAlpha=.3; ctx.fillStyle='rgba(255,255,255,.5)'; ctx.fillRect(-e.w/2+5,-e.h/2+3.5,e.w-10,1.6);
+  ctx.globalAlpha=.2; ctx.fillStyle='#000'; ctx.fillRect(-e.w/2+5,e.h/2-4,e.w-10,1.6);
+  ctx.globalAlpha=1;
+  ctx.lineCap='round';
+  for(const c of e.cracks){
+    ctx.strokeStyle=`rgba(60,28,24,${c.o})`; ctx.lineWidth=1.1;
+    ctx.beginPath();
+    ctx.moveTo(c.pts[0][0],c.pts[0][1]); ctx.lineTo(c.pts[1][0],c.pts[1][1]); ctx.lineTo(c.pts[2][0],c.pts[2][1]);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawCapsule(a,b,w,c1,c2){
+  ctx.save();
+  ctx.lineCap='round'; ctx.lineJoin='round';
+  ctx.shadowColor='rgba(0,0,0,.31)'; ctx.shadowBlur=13; ctx.shadowOffsetY=7;
+  const g=ctx.createLinearGradient(a.x,a.y,b.x,b.y);
+  g.addColorStop(0,c1); g.addColorStop(1,c2);
+  ctx.strokeStyle=g; ctx.lineWidth=w;
+  ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.stroke();
+  ctx.shadowColor='transparent';
+  ctx.globalAlpha=.28; ctx.strokeStyle='rgba(255,255,255,.75)'; ctx.lineWidth=Math.max(2,w*.16);
+  ctx.beginPath(); ctx.moveTo(a.x,a.y-1); ctx.lineTo(b.x,b.y-1); ctx.stroke();
+  ctx.restore();
+}
+function drawRagdoll(e){
+  const p=e.p;
+  for(const b of e.bones) drawCapsule(p[b[0]],p[b[1]],b[2],'#7c88a6','#525d78');
+
+  ctx.save();
+  ctx.shadowColor='rgba(0,0,0,.34)'; ctx.shadowBlur=16; ctx.shadowOffsetY=9;
+  ctx.beginPath();
+  ctx.moveTo(p.ls.x,p.ls.y); ctx.lineTo(p.rs.x,p.rs.y);
+  ctx.quadraticCurveTo(p.chest.x+8,p.chest.y,p.rh.x,p.rh.y);
+  ctx.lineTo(p.lh.x,p.lh.y);
+  ctx.quadraticCurveTo(p.chest.x-8,p.chest.y,p.ls.x,p.ls.y);
+  ctx.closePath();
+  const tg=ctx.createLinearGradient(p.neck.x,p.neck.y,p.pelvis.x,p.pelvis.y);
+  tg.addColorStop(0,'#8b96b4'); tg.addColorStop(.55,'#5d6985'); tg.addColorStop(1,'#434d66');
+  ctx.fillStyle=tg; ctx.fill();
+  ctx.shadowColor='transparent';
+  ctx.strokeStyle='rgba(225,235,255,.22)'; ctx.lineWidth=1.5; ctx.stroke();
+  ctx.strokeStyle='rgba(20,26,40,.25)'; ctx.lineWidth=1.2; ctx.setLineDash([3,4]);
+  ctx.beginPath(); ctx.moveTo(p.neck.x,p.neck.y); ctx.lineTo(p.pelvis.x,p.pelvis.y); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.restore();
+
+  ctx.save();
+  const hg=ctx.createRadialGradient(p.head.x-6,p.head.y-7,2,p.head.x,p.head.y,22);
+  hg.addColorStop(0,'#fff0d0'); hg.addColorStop(.55,'#d9a97d'); hg.addColorStop(1,'#8c5d50');
+  ctx.shadowColor='rgba(0,0,0,.32)'; ctx.shadowBlur=16; ctx.shadowOffsetY=7;
+  ctx.fillStyle=hg;
+  ctx.beginPath(); ctx.arc(p.head.x,p.head.y,16,0,TAU); ctx.fill();
+  ctx.shadowColor='transparent';
+  ctx.strokeStyle='rgba(255,255,255,.22)'; ctx.lineWidth=1.4; ctx.stroke();
+  ctx.fillStyle='rgba(40,30,35,.55)';
+  ctx.beginPath(); ctx.arc(p.head.x-5,p.head.y-2,1.7,0,TAU); ctx.arc(p.head.x+5,p.head.y-2,1.7,0,TAU); ctx.fill();
+  ctx.restore();
+
+  ctx.save();
+  ctx.fillStyle='rgba(215,229,255,.45)';
+  for(const k of ['ls','rs','lh','rh','le','re','lk','rk']){ ctx.beginPath(); ctx.arc(p[k].x,p[k].y,3.2,0,TAU); ctx.fill(); }
+  ctx.restore();
+}
+
+function drawDust(){
+  ctx.save();
+  for(const d of dust){
+    if(d.glow) continue;
+    const a=clamp(d.life/d.max,0,1);
+    ctx.fillStyle=d.color+(a*.5)+')';
+    ctx.beginPath(); ctx.arc(d.x,d.y,d.r*(.6+a*.6),0,TAU); ctx.fill();
+  }
+  ctx.restore();
+  ctx.save();
+  ctx.globalCompositeOperation='lighter';
+  for(const d of dust){
+    if(!d.glow) continue;
+    const a=clamp(d.life/d.max,0,1);
+    ctx.fillStyle=d.color+(a*.42)+')';
+    ctx.beginPath(); ctx.arc(d.x,d.y,d.r*(.55+a*.65),0,TAU); ctx.fill();
+  }
+  ctx.restore();
+}
+
+function drawGrab(){
+  if(!grab.p) return;
+  const p=grab.p;
+  ctx.save();
+  ctx.strokeStyle='rgba(118,232,255,.45)'; ctx.lineWidth=2; ctx.setLineDash([7,7]);
+  ctx.beginPath(); ctx.moveTo(pointer.x,pointer.y); ctx.lineTo(p.x,p.y); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle='rgba(118,232,255,.16)'; ctx.strokeStyle='rgba(255,255,255,.55)'; ctx.lineWidth=1.5;
+  ctx.beginPath(); ctx.arc(pointer.x,pointer.y,16,0,TAU); ctx.fill(); ctx.stroke();
+  ctx.restore();
+}
+
+function render(){
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+  const sx=(Math.random()*2-1)*shake, sy=(Math.random()*2-1)*shake;
+  shake *= .86; if(shake < .06) shake=0;
+  ctx.save();
+  ctx.translate(sx,sy);
+  drawBackground();
+  drawStage();
+  for(const e of bricks) drawBrick(e);
+  for(const e of ragdolls) drawRagdoll(e);
+  for(const e of jellies) drawJelly(e);
+  drawDust();
+  drawGrab();
+  ctx.restore();
+}
+
+const fpsEl=document.getElementById('fps');
+const bodiesEl=document.getElementById('bodies');
+const gSlider=document.getElementById('gravity');
+const gRead=document.getElementById('gRead');
+
+function updateSliderFill(){
+  const min=+gSlider.min,max=+gSlider.max,val=+gSlider.value;
+  gSlider.style.setProperty('--fill',((val-min)/(max-min))*100+'%');
+}
+gSlider.addEventListener('input',()=>{ gravity=+gSlider.value; gRead.textContent=Math.round(gravity); updateSliderFill(); });
+updateSliderFill();
+
+document.getElementById('addJelly').addEventListener('click', addRandomJelly);
+document.getElementById('dropRagdoll').addEventListener('click', dropRagdoll);
+document.getElementById('rebuildWall').addEventListener('click', rebuildWall);
+document.getElementById('reset').addEventListener('click', resetWorld);
+
+let last=now(), fpsV=60, statT=0;
+function loop(t){
+  const raw=(t-last)/1000; last=t;
+  const dt=clamp(raw,0,1/30);
+  burstBudget=8;
+  const h=dt/SUBSTEPS;
+  for(let i=0;i<SUBSTEPS;i++) physicsStep(h);
+  render();
+
+  fpsV=lerp(fpsV,1/Math.max(raw,1e-6),.1);
+  statT += raw;
+  if(statT>.2){ fpsEl.textContent=Math.round(fpsV); bodiesEl.textContent=entities.length; statT=0; }
+  requestAnimationFrame(loop);
+}
+
+resize();
+requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
