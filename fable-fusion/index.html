@@ -464,6 +464,12 @@ void main(){
   // exposure
   outColor *= uExposure;
 
+  // guard: NaN/Inf in HDR pixels get smeared across the screen by the bloom blur on some
+  // GPUs (looks like full-frame flicker). NaN fails every comparison, so greaterThanEqual
+  // picks 0 for NaN/negative; then clamp Inf/huge to finite HDR headroom before bloom.
+  outColor = mix(vec3(0.0), outColor, vec3(greaterThanEqual(outColor, vec3(0.0))));
+  outColor = min(outColor, vec3(60.0));
+
   gl_FragColor = vec4(outColor, 1.0);
 }
 `;
