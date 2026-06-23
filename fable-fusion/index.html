@@ -1,0 +1,699 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>Gargantua — Relativistic Black Hole</title>
+<style>
+  :root{
+    --bg:#050608;
+    --panel:rgba(16,18,24,0.55);
+    --panel-border:rgba(255,255,255,0.10);
+    --txt:#e8ecf4;
+    --txt-dim:#8a93a6;
+    --accent:#f0a868;
+    --accent2:#6fb3ff;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;height:100%;width:100%;overflow:hidden;background:var(--bg);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    color:var(--txt);-webkit-font-smoothing:antialiased;}
+  #app{position:fixed;inset:0;}
+  canvas{display:block;width:100%;height:100%;touch-action:none;}
+
+  /* ---------- Loader ---------- */
+  #loader{position:fixed;inset:0;z-index:50;display:flex;flex-direction:column;
+    align-items:center;justify-content:center;gap:22px;background:radial-gradient(120% 120% at 50% 40%,#0b0d12 0%,#020304 70%);
+    transition:opacity .8s ease;}
+  #loader.hidden{opacity:0;pointer-events:none;}
+  .ring-spin{width:74px;height:74px;border-radius:50%;
+    border:2px solid rgba(255,255,255,0.08);
+    border-top-color:var(--accent);border-right-color:var(--accent2);
+    animation:spin 1.05s cubic-bezier(.6,.2,.4,.8) infinite;
+    box-shadow:0 0 26px rgba(240,168,104,0.25);}
+  @keyframes spin{to{transform:rotate(360deg);}}
+  #loader .lbl{font-size:13px;letter-spacing:.32em;text-transform:uppercase;color:var(--txt-dim);}
+  #loader .sub{font-size:11px;letter-spacing:.18em;color:#5b6373;margin-top:-10px;}
+
+  /* ---------- Title ---------- */
+  #title{position:fixed;top:22px;left:26px;z-index:20;pointer-events:none;
+    text-shadow:0 2px 18px rgba(0,0,0,0.8);}
+  #title h1{margin:0;font-size:20px;font-weight:600;letter-spacing:.10em;}
+  #title p{margin:3px 0 0;font-size:11px;letter-spacing:.22em;text-transform:uppercase;color:var(--txt-dim);}
+
+  /* ---------- Control panel ---------- */
+  #panel{position:fixed;top:20px;right:20px;z-index:30;width:288px;max-width:calc(100vw - 36px);
+    background:var(--panel);backdrop-filter:blur(18px) saturate(140%);
+    -webkit-backdrop-filter:blur(18px) saturate(140%);
+    border:1px solid var(--panel-border);border-radius:16px;
+    box-shadow:0 18px 50px rgba(0,0,0,0.55),inset 0 1px 0 rgba(255,255,255,0.06);
+    padding:16px 16px 8px;user-select:none;transition:transform .35s ease,opacity .35s ease;}
+  #panel.collapsed{transform:translateX(calc(100% - 52px));}
+  #panel-head{display:flex;align-items:center;justify-content:space-between;cursor:pointer;margin-bottom:12px;}
+  #panel-head .h{font-size:12px;letter-spacing:.2em;text-transform:uppercase;color:var(--txt);}
+  #panel-head .tog{width:24px;height:24px;border-radius:7px;display:flex;align-items:center;justify-content:center;
+    background:rgba(255,255,255,0.06);color:var(--txt-dim);font-size:12px;transition:transform .35s ease;}
+  #panel.collapsed #panel-head .tog{transform:rotate(180deg);}
+  .ctrl{margin:0 0 13px;}
+  .ctrl .row{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px;}
+  .ctrl label{font-size:11.5px;letter-spacing:.04em;color:var(--txt-dim);}
+  .ctrl .val{font-size:11px;color:var(--accent);font-variant-numeric:tabular-nums;}
+  input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:4px;border-radius:4px;
+    background:linear-gradient(90deg,var(--accent) 0%,var(--accent) var(--p,50%),rgba(255,255,255,0.12) var(--p,50%),rgba(255,255,255,0.12) 100%);
+    outline:none;cursor:pointer;}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:15px;height:15px;border-radius:50%;
+    background:#fff;border:2px solid var(--accent);box-shadow:0 0 8px rgba(240,168,104,0.6);cursor:pointer;transition:transform .12s;}
+  input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.15);}
+  input[type=range]::-moz-range-thumb{width:15px;height:15px;border-radius:50%;background:#fff;border:2px solid var(--accent);
+    box-shadow:0 0 8px rgba(240,168,104,0.6);cursor:pointer;}
+  .seg{display:flex;gap:6px;margin-bottom:6px;}
+  .seg button{flex:1;font-size:10.5px;letter-spacing:.04em;padding:7px 0;border-radius:9px;cursor:pointer;
+    background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.08);color:var(--txt-dim);transition:.18s;}
+  .seg button.active{background:rgba(240,168,104,0.16);border-color:rgba(240,168,104,0.5);color:var(--accent);}
+  .seg button:hover{color:var(--txt);}
+  .hint{font-size:10px;color:#5b6373;letter-spacing:.05em;margin:2px 2px 10px;line-height:1.5;}
+  #fps{position:fixed;bottom:14px;left:16px;z-index:20;font-size:10.5px;letter-spacing:.12em;
+    color:var(--txt-dim);font-variant-numeric:tabular-nums;text-shadow:0 1px 6px #000;pointer-events:none;}
+  @media (max-width:560px){
+    #title{top:14px;left:16px;} #title h1{font-size:16px;}
+    #panel{top:auto;bottom:14px;right:14px;left:14px;width:auto;max-width:none;}
+    #panel.collapsed{transform:translateY(calc(100% - 50px));}
+  }
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<div id="title">
+  <h1>GARGANTUA</h1>
+  <p>Schwarzschild geodesic lensing</p>
+</div>
+
+<div id="panel">
+  <div id="panel-head"><span class="h">Controls</span><span class="tog">▸</span></div>
+  <div id="panel-body"></div>
+  <div class="hint">Drag to orbit · scroll / pinch to zoom</div>
+</div>
+
+<div id="fps">— fps</div>
+
+<div id="loader">
+  <div class="ring-spin"></div>
+  <div class="lbl">Bending light</div>
+  <div class="sub">integrating null geodesics…</div>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+
+/* =========================================================================
+   Approach: we render the entire scene inside ONE full-screen fragment
+   shader. For every pixel we reconstruct a camera ray, then integrate the
+   photon's path through the Schwarzschild geometry by solving the exact
+   null-geodesic orbit equation in the plane of motion:
+
+         d²u/dφ² + u = (3/2) rs u²        ( u = 1/r )
+
+   This is the genuine relativistic bending term (the rs u² term is the GR
+   correction beyond Newtonian deflection). Marching φ forward we follow the
+   bent ray: if it falls below the horizon -> black; if it crosses the disk
+   plane within the disk annulus -> sample the emissive, Doppler-beamed,
+   gravitationally-redshifted accretion disk; otherwise it escapes to the
+   procedural starfield, sampled in its FINAL bent direction. The photon ring
+   / Einstein ring and the "far side lensed over the top" disk both emerge
+   from this integration — nothing is drawn by hand.
+   ========================================================================= */
+
+const params = {
+  mass:          1.0,   // schwarzschild radius scale
+  diskBrightness:0.70,
+  diskTemp:      0.55,   // 0 = cool red/orange, 1 = hot blue-white
+  spin:          1.0,   // disk rotation speed (visual angular velocity)
+  exposure:      0.82,
+  lensing:       1.0,   // multiplier on the GR deflection term
+  bloom:         0.45,
+  quality:       'auto' // auto | high | balanced | perf
+};
+
+const container = document.getElementById('app');
+
+const renderer = new THREE.WebGLRenderer({ antialias:false, powerPreference:'high-performance' });
+renderer.setClearColor(0x000000, 1);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+container.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+
+// Real perspective camera so OrbitControls gives us a true orbit; we pass its
+// matrices into the shader and rebuild rays per-pixel.
+const camera = new THREE.PerspectiveCamera(55, 1, 0.01, 100);
+camera.position.set(0, 2.2, 13.0);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.07;
+controls.rotateSpeed = 0.55;
+controls.zoomSpeed = 0.8;
+controls.minDistance = 5.0;
+controls.maxDistance = 40.0;
+controls.target.set(0, 0, 0);
+// keep camera from going perfectly polar (disk would vanish to a line)
+controls.minPolarAngle = 0.12;
+controls.maxPolarAngle = Math.PI - 0.12;
+
+/* ----------------------------- Shaders ----------------------------- */
+const vert = /* glsl */`
+  varying vec2 vUv;
+  void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }
+`;
+
+const frag = /* glsl */`
+precision highp float;
+varying vec2 vUv;
+
+uniform vec2  uResolution;
+uniform float uTime;
+uniform vec3  uCamPos;
+uniform mat4  uCamToWorld;   // camera world matrix (rotation+pos)
+uniform float uTanHalfFov;
+uniform float uAspect;
+
+uniform float uRs;           // schwarzschild radius (world units)
+uniform float uDiskInner;    // inner disk radius (in rs)
+uniform float uDiskOuter;    // outer disk radius (in rs)
+uniform float uDiskBright;
+uniform float uDiskTemp;
+uniform float uSpin;
+uniform float uLensing;
+uniform float uExposure;
+uniform int   uSteps;        // geodesic integration steps (quality)
+
+const float PI = 3.14159265359;
+
+/* ---------- hashing / noise for the procedural starfield ---------- */
+float hash21(vec2 p){
+  p = fract(p*vec2(123.34, 456.21));
+  p += dot(p, p+45.32);
+  return fract(p.x*p.y);
+}
+float hash31(vec3 p){
+  p = fract(p*0.3183099 + vec3(0.1,0.2,0.3));
+  p *= 17.0;
+  return fract(p.x*p.y*p.z*(p.x+p.y+p.z));
+}
+
+// Star layers sampled on a direction vector (so lensing distorts them).
+vec3 starField(vec3 dir){
+  vec3 col = vec3(0.0);
+  // map direction to spherical-ish uv via two faces to avoid pole pinch
+  for(int L=0; L<3; L++){
+    float scale = 14.0 + float(L)*22.0;
+    // project onto dominant-axis plane for stable cells
+    vec3 ad = abs(dir);
+    vec2 uv;
+    if(ad.x>=ad.y && ad.x>=ad.z) uv = dir.yz/ad.x;
+    else if(ad.y>=ad.z)          uv = dir.xz/ad.y;
+    else                         uv = dir.xy/ad.z;
+    uv = uv*0.5+0.5;
+    vec2 g = uv*scale;
+    vec2 cell = floor(g);
+    vec2 f = fract(g);
+    float h = hash21(cell + float(L)*37.0);
+    if(h > 0.965 - float(L)*0.006){
+      vec2 star = vec2(hash21(cell+1.3), hash21(cell+7.7));
+      float d = length(f - star);
+      float bri = smoothstep(0.16, 0.0, d);
+      bri = pow(bri, 2.4);
+      // twinkle + color temperature variation
+      float tw = 0.7 + 0.3*sin(uTime*1.7 + h*60.0);
+      float t = hash21(cell+3.1);
+      vec3 sc = mix(vec3(0.65,0.78,1.0), vec3(1.0,0.86,0.65), t);
+      sc = mix(sc, vec3(1.0), 0.35);
+      col += sc * bri * tw * (1.4 - float(L)*0.35);
+    }
+  }
+  // faint nebular wash so the lensing has large-scale structure to bend
+  float n = hash31(floor(dir*8.0))*0.5 + hash31(floor(dir*19.0))*0.5;
+  vec3 neb = mix(vec3(0.015,0.02,0.05), vec3(0.06,0.03,0.05), n);
+  neb *= smoothstep(0.2,0.9,n);
+  col += neb*0.5;
+  // deep base
+  col += vec3(0.004,0.006,0.012);
+  return col;
+}
+
+/* ---------- blackbody-ish color ramp for the disk ---------- */
+vec3 temperatureColor(float t){
+  // t in [0,1] cool->hot
+  vec3 cool = vec3(1.0, 0.35, 0.08);   // deep orange-red
+  vec3 mid  = vec3(1.0, 0.78, 0.43);   // amber/white-gold
+  vec3 hot  = vec3(0.75, 0.86, 1.0);   // blue-white
+  vec3 c = (t<0.5) ? mix(cool, mid, t*2.0) : mix(mid, hot, (t-0.5)*2.0);
+  return c;
+}
+
+/* sample the accretion-disk emission at world radius r (world units) on the
+   equatorial plane, given the azimuth phi and the photon's history.
+   Includes Doppler beaming + gravitational redshift. */
+vec3 sampleDisk(vec3 hitPos, vec3 photonDir){
+  float r = length(hitPos.xz);
+  float rIn  = uDiskInner*uRs;
+  float rOut = uDiskOuter*uRs;
+  if(r < rIn || r > rOut) return vec3(0.0);
+
+  // radial falloff: brightest just outside ISCO, fading outward
+  float rn = (r - rIn)/(rOut - rIn);            // 0..1
+  float radial = pow(1.0 - rn, 1.6) * smoothstep(0.0,0.10,rn);
+  radial += 0.25*exp(-rn*6.0);
+
+  // azimuthal turbulent banding (procedural) advected by rotation
+  float ang = atan(hitPos.z, hitPos.x);
+  float orbV = uSpin * 0.9 * pow(rIn/r, 1.5);   // keplerian-ish ang. velocity
+  float swirl = ang*1.0 + uTime*orbV*2.4;
+  float bands = 0.55 + 0.45*sin(swirl*7.0 + sin(swirl*3.0)*1.5);
+  float fil   = 0.6 + 0.4*sin(swirl*17.0 + r*9.0);
+  float texture = mix(1.0, bands*fil, 0.7);
+
+  // --- relativistic Doppler beaming ---
+  // orbital velocity vector (prograde, in +y up frame), tangential in xz-plane
+  vec3 vdir = normalize(vec3(-hitPos.z, 0.0, hitPos.x)); // tangential
+  float beta = clamp(0.62 * sqrt(rIn/r), 0.0, 0.85);     // v/c, faster inward
+  // line-of-sight: photon travels along photonDir toward camera; the matter
+  // sees -photonDir. Approaching matter => beaming toward us.
+  float mu = dot(vdir, -photonDir);
+  float gamma = 1.0/sqrt(1.0 - beta*beta);
+  float doppler = 1.0 / (gamma * (1.0 - beta*mu));        // relativistic factor
+  // beaming brightens with the ~3rd power for bolometric flux of a moving source
+  float beam = pow(doppler, 3.0);
+
+  // --- gravitational redshift (stronger near horizon) ---
+  // factor sqrt(1 - rs/r); blueshift the color outward, redshift inward
+  float grav = sqrt(max(1.0 - uRs/r, 0.02));
+  float totalShift = doppler * grav;   // >1 blueshift, <1 redshift
+
+  // base temperature: hotter inward + user temp, then shifted
+  float baseT = uDiskTemp*0.55 + 0.45*pow(1.0-rn,1.2);
+  float shiftedT = clamp(baseT*0.6 + (totalShift-1.0)*0.9 + 0.3, 0.0, 1.0);
+  vec3 col = temperatureColor(shiftedT);
+
+  float emission = radial * texture * beam * grav;
+  emission *= uDiskBright * 3.2;
+
+  // soften the inner/outer edges
+  emission *= smoothstep(rIn, rIn*1.08, r);
+  emission *= smoothstep(rOut, rOut*0.86, r);
+
+  return col * emission;
+}
+
+void main(){
+  vec2 ndc = (vUv*2.0 - 1.0);
+  ndc.x *= uAspect;
+
+  // build ray in camera space then to world
+  vec3 rayCam = normalize(vec3(ndc.x*uTanHalfFov, ndc.y*uTanHalfFov, -1.0));
+  vec3 rayDir = normalize((uCamToWorld * vec4(rayCam, 0.0)).xyz);
+  vec3 camPos = uCamPos;
+
+  // ----- set up the geodesic integration in the photon's orbital plane -----
+  // The orbit lies in the plane spanned by (camPos, rayDir) through origin.
+  vec3 pos = camPos;
+  float r0 = length(pos);
+
+  // normal to orbital plane
+  vec3 planeN = normalize(cross(pos, rayDir));
+  // handle near-radial rays (degenerate plane)
+  if(length(cross(pos, rayDir)) < 1e-4){
+    planeN = normalize(cross(pos, pos+vec3(0.001,0.013,0.0)));
+  }
+  // basis in the plane: e1 along pos, e2 perpendicular (direction of increasing phi)
+  vec3 e1 = normalize(pos);
+  vec3 e2 = normalize(cross(planeN, e1));
+
+  // initial angle phi = 0 ; u = 1/r
+  float u = 1.0/r0;
+  // du/dphi from the initial ray direction:
+  //   r' = dr/dlambda ~ dot(rayDir, e1); r*phi' ~ dot(rayDir, e2)
+  float drdl   = dot(rayDir, e1);
+  float rdphidl= dot(rayDir, e2);
+  // du/dphi = -(1/r^2) dr/dphi = -(1/r^2)*(r'/phi') ; phi' = rdphidl / r
+  // => du/dphi = -(1/r) * (drdl / rdphidl)
+  float dudphi = -(1.0/r0) * (drdl / (rdphidl + 1e-6));
+
+  // photons move in +phi if rdphidl>0; we always integrate phi forward but
+  // flip e2 so rdphidl is positive.
+  if(rdphidl < 0.0){ e2 = -e2; dudphi = -dudphi; rdphidl = -rdphidl; }
+
+  float rs = uRs;
+  float horizon = rs*1.0;          // event horizon at r = rs
+  // step in phi; total swept angle generous enough for strong-field wrapping
+  int STEPS = uSteps;
+  float dphi = (2.0*PI*2.0) / float(STEPS);   // up to ~2 full wraps
+  float phi = 0.0;
+
+  vec3 prevPos = pos;
+  float prevY = pos.y;
+
+  vec3 outColor = vec3(0.0);
+  bool done = false;
+  bool captured = false;
+
+  // GR deflection coefficient (1.5 = exact Schwarzschild). uLensing scales it
+  // for artistic control while staying physically grounded.
+  float K = 1.5 * uLensing;
+
+  for(int i=0;i<2048;i++){
+    if(i>=STEPS) break;
+    if(done) break;
+
+    // ---- RK4 step of: u'' = -u + K*rs*u^2 ----
+    float U=u, V=dudphi;
+    // k1
+    float a1 = -U + K*rs*U*U;
+    float dU1=V, dV1=a1;
+    // k2
+    float U2=U+0.5*dphi*dU1, V2=V+0.5*dphi*dV1;
+    float a2=-U2 + K*rs*U2*U2;
+    float dU2=V2, dV2=a2;
+    // k3
+    float U3=U+0.5*dphi*dU2, V3=V+0.5*dphi*dV2;
+    float a3=-U3 + K*rs*U3*U3;
+    float dU3=V3, dV3=a3;
+    // k4
+    float U4=U+dphi*dU3, V4=V+dphi*dV3;
+    float a4=-U4 + K*rs*U4*U4;
+    float dU4=V4, dV4=a4;
+
+    u      += (dphi/6.0)*(dU1+2.0*dU2+2.0*dU3+dU4);
+    dudphi += (dphi/6.0)*(dV1+2.0*dV2+2.0*dV3+dV4);
+    phi    += dphi;
+
+    if(u <= 0.0){ // escaped to infinity (r -> inf)
+      done = true;
+      break;
+    }
+    float r = 1.0/u;
+
+    // current world position along the bent ray
+    vec3 npos = (cos(phi)*e1 + sin(phi)*e2) * r;
+
+    // captured by the hole?
+    if(r <= horizon*1.02){
+      captured = true; done = true; break;
+    }
+
+    // ---- accretion-disk plane crossing (y = 0) ----
+    if(prevPos.y * npos.y < 0.0){
+      // interpolate crossing point
+      float t = prevPos.y/(prevPos.y - npos.y);
+      vec3 cross = mix(prevPos, npos, t);
+      float rc = length(cross.xz);
+      if(rc >= uDiskInner*rs && rc <= uDiskOuter*rs){
+        // photon direction at crossing (for Doppler): tangent of the path
+        vec3 pdir = normalize(npos - prevPos);
+        vec3 contrib = sampleDisk(cross, pdir);
+        // disk is emissive & semi-transparent; accumulate (front-to-back-ish)
+        outColor += contrib;
+      }
+    }
+
+    prevPos = npos;
+
+    // far enough away and moving outward? sample stars in current direction.
+    if(r > 60.0){
+      done = true;
+      vec3 escDir = normalize(npos - prevPos*0.0 + (cos(phi)*e1+sin(phi)*e2)*0.0);
+      // better escape direction: derivative of position wrt phi
+      vec3 tangent = normalize( (-sin(phi)*e1 + cos(phi)*e2)*r + (cos(phi)*e1+sin(phi)*e2)*(-1.0/(u*u))*dudphi );
+      outColor += starField(tangent);
+      break;
+    }
+  }
+
+  if(captured){
+    // event horizon: pure black (with a hair of disk glow already accumulated)
+    // leave outColor as-is (only disk light captured before crossing)
+  } else if(!done){
+    // ran out of steps without escaping or being captured: approximate by
+    // sampling stars along last tangent (rare, only extreme grazing rays)
+    vec3 tangent = normalize( (-sin(phi)*e1 + cos(phi)*e2) );
+    outColor += starField(tangent)*0.7;
+  } else if(!captured){
+    // escaped normally and stars already added when r>60, OR u<=0 escape:
+    if(u <= 0.0){
+      vec3 tangent = normalize(-sin(phi)*e1 + cos(phi)*e2);
+      outColor += starField(tangent);
+    }
+  }
+
+  // exposure
+  outColor *= uExposure;
+
+  gl_FragColor = vec4(outColor, 1.0);
+}
+`;
+
+const quad = new THREE.PlaneGeometry(2, 2);
+const uniforms = {
+  uResolution:{ value:new THREE.Vector2(1,1) },
+  uTime:      { value:0 },
+  uCamPos:    { value:new THREE.Vector3() },
+  uCamToWorld:{ value:new THREE.Matrix4() },
+  uTanHalfFov:{ value:Math.tan(THREE.MathUtils.degToRad(55*0.5)) },
+  uAspect:    { value:1 },
+  uRs:        { value:1.0 },
+  uDiskInner: { value:2.4 },   // ~ISCO (3 rs in real GR; tuned for look)
+  uDiskOuter: { value:9.0 },
+  uDiskBright:{ value:params.diskBrightness },
+  uDiskTemp:  { value:params.diskTemp },
+  uSpin:      { value:params.spin },
+  uLensing:   { value:params.lensing },
+  uExposure:  { value:params.exposure },
+  uSteps:     { value:240 }
+};
+
+const bhMaterial = new THREE.ShaderMaterial({
+  vertexShader: vert,
+  fragmentShader: frag,
+  uniforms,
+  depthTest:false,
+  depthWrite:false
+});
+const bhMesh = new THREE.Mesh(quad, bhMaterial);
+bhMesh.frustumCulled = false;
+scene.add(bhMesh);
+
+/* --------------------- Post-processing chain --------------------- */
+const composer = new EffectComposer(renderer);
+const renderPass = new RenderPass(scene, camera);
+composer.addPass(renderPass);
+
+const bloomPass = new UnrealBloomPass(new THREE.Vector2(1,1), params.bloom, 0.55, 0.72);
+composer.addPass(bloomPass);
+
+// ACES filmic tonemapping pass (manual, so we control exposure independent of bloom)
+const ACESShader = {
+  uniforms:{ tDiffuse:{ value:null }, uExposure:{ value:1.0 } },
+  vertexShader:`varying vec2 vUv; void main(){ vUv=uv; gl_Position=vec4(position.xy,0.0,1.0);} `,
+  fragmentShader:`
+    varying vec2 vUv; uniform sampler2D tDiffuse; uniform float uExposure;
+    // Narkowicz ACES filmic approximation
+    vec3 aces(vec3 x){
+      const float a=2.51, b=0.03, c=2.43, d=0.59, e=0.14;
+      return clamp((x*(a*x+b))/(x*(c*x+d)+e), 0.0, 1.0);
+    }
+    void main(){
+      vec3 hdr = texture2D(tDiffuse, vUv).rgb * uExposure;
+      vec3 mapped = aces(hdr);
+      // gamma to sRGB
+      mapped = pow(mapped, vec3(1.0/2.2));
+      gl_FragColor = vec4(mapped, 1.0);
+    }`
+};
+const acesPass = new ShaderPass(ACESShader);
+composer.addPass(acesPass);
+
+const outputPass = new OutputPass();
+// OutputPass would re-apply sRGB; we already did gamma in ACES pass, so skip it.
+// (kept import-free by not adding it)
+
+/* ------------------------- Resize & quality ------------------------- */
+let qualityScale = 1.0;
+function detectQuality(){
+  if(params.quality === 'high'){ qualityScale = 1.0; uniforms.uSteps.value = 320; return; }
+  if(params.quality === 'balanced'){ qualityScale = 0.8; uniforms.uSteps.value = 240; return; }
+  if(params.quality === 'perf'){ qualityScale = 0.6; uniforms.uSteps.value = 160; return; }
+  // auto: base on device pixel ratio & rough GPU heuristic
+  const dpr = window.devicePixelRatio || 1;
+  const big = Math.max(window.innerWidth, window.innerHeight);
+  if(big*dpr > 2400){ qualityScale = 0.7; uniforms.uSteps.value = 200; }
+  else { qualityScale = Math.min(dpr, 1.5)/Math.max(dpr,1); qualityScale = 0.85; uniforms.uSteps.value = 240; }
+}
+detectQuality();
+
+function onResize(){
+  const w = window.innerWidth, h = window.innerHeight;
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  renderer.setPixelRatio(dpr * qualityScale);
+  renderer.setSize(w, h, false);
+  composer.setPixelRatio(dpr * qualityScale);
+  composer.setSize(w, h);
+  bloomPass.setSize(w*dpr*qualityScale, h*dpr*qualityScale);
+
+  camera.aspect = w/h;
+  camera.updateProjectionMatrix();
+
+  uniforms.uResolution.value.set(w, h);
+  uniforms.uAspect.value = w/h;
+  uniforms.uTanHalfFov.value = Math.tan(THREE.MathUtils.degToRad(camera.fov*0.5));
+}
+window.addEventListener('resize', onResize);
+onResize();
+
+/* ------------------------------ UI ------------------------------ */
+const panelBody = document.getElementById('panel-body');
+function addSlider(key, label, min, max, step, fmt){
+  const wrap = document.createElement('div'); wrap.className='ctrl';
+  const row = document.createElement('div'); row.className='row';
+  const lab = document.createElement('label'); lab.textContent=label;
+  const val = document.createElement('span'); val.className='val';
+  row.appendChild(lab); row.appendChild(val);
+  const inp = document.createElement('input'); inp.type='range';
+  inp.min=min; inp.max=max; inp.step=step; inp.value=params[key];
+  const upd = ()=>{
+    const v = parseFloat(inp.value);
+    params[key]=v;
+    val.textContent = fmt ? fmt(v) : v.toFixed(2);
+    const p = ((v-min)/(max-min))*100;
+    inp.style.setProperty('--p', p+'%');
+    applyParams();
+  };
+  inp.addEventListener('input', upd);
+  wrap.appendChild(row); wrap.appendChild(inp);
+  panelBody.appendChild(wrap);
+  upd();
+}
+
+function addSegment(key, label, opts){
+  const wrap = document.createElement('div'); wrap.className='ctrl';
+  const row = document.createElement('div'); row.className='row';
+  const lab = document.createElement('label'); lab.textContent=label;
+  row.appendChild(lab); wrap.appendChild(row);
+  const seg = document.createElement('div'); seg.className='seg';
+  opts.forEach(o=>{
+    const b=document.createElement('button'); b.textContent=o.label;
+    if(params[key]===o.value) b.classList.add('active');
+    b.addEventListener('click', ()=>{
+      params[key]=o.value;
+      [...seg.children].forEach(c=>c.classList.remove('active'));
+      b.classList.add('active');
+      detectQuality(); onResize();
+    });
+    seg.appendChild(b);
+  });
+  wrap.appendChild(seg); panelBody.appendChild(wrap);
+}
+
+addSlider('mass','Black-hole mass / Rₛ',0.4,2.2,0.01,v=>v.toFixed(2)+'×');
+addSlider('diskBrightness','Disk brightness',0.0,2.5,0.01);
+addSlider('diskTemp','Disk temperature',0.0,1.0,0.01,v=> v<0.34?'cool':(v<0.67?'warm':'hot'));
+addSlider('spin','Spin / rotation',0.0,3.0,0.01,v=>v.toFixed(2)+'×');
+addSlider('exposure','Camera exposure',0.3,2.2,0.01);
+addSlider('lensing','Lensing strength',0.4,1.8,0.01,v=>v.toFixed(2)+'×');
+addSlider('bloom','Bloom',0.0,1.8,0.01);
+addSegment('quality','Quality',[
+  {label:'Auto',value:'auto'},{label:'High',value:'high'},
+  {label:'Balanced',value:'balanced'},{label:'Perf',value:'perf'}
+]);
+
+function applyParams(){
+  uniforms.uRs.value       = params.mass;
+  uniforms.uDiskBright.value = params.diskBrightness;
+  uniforms.uDiskTemp.value = params.diskTemp;
+  uniforms.uSpin.value     = params.spin;
+  uniforms.uExposure.value = 1.0; // exposure handled in ACES pass
+  acesPass.uniforms.uExposure.value = params.exposure;
+  uniforms.uLensing.value  = params.lensing;
+  bloomPass.strength       = params.bloom;
+}
+applyParams();
+
+// panel collapse
+const panel = document.getElementById('panel');
+document.getElementById('panel-head').addEventListener('click', ()=>{
+  panel.classList.toggle('collapsed');
+});
+
+/* ----------------------------- Loop ----------------------------- */
+const clock = new THREE.Clock();
+let frames=0, fpsAccum=0, fps=60;
+const fpsEl = document.getElementById('fps');
+const loaderEl = document.getElementById('loader');
+let started=false;
+let autoScaleTimer=0;
+
+function adaptivePerf(dt){
+  // simple auto downscale if framerate is poor for a sustained period
+  if(params.quality!=='auto') return;
+  autoScaleTimer += dt;
+  if(autoScaleTimer < 2.5) return;
+  autoScaleTimer = 0;
+  if(fps < 45 && uniforms.uSteps.value > 140){
+    uniforms.uSteps.value = Math.max(140, uniforms.uSteps.value - 40);
+  } else if(fps < 30 && qualityScale > 0.55){
+    qualityScale = Math.max(0.55, qualityScale - 0.1);
+    onResize();
+  }
+}
+
+function animate(){
+  requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), 0.05);
+  uniforms.uTime.value += dt;
+
+  controls.update();
+
+  // feed camera matrices to the shader
+  camera.updateMatrixWorld();
+  uniforms.uCamPos.value.copy(camera.position);
+  uniforms.uCamToWorld.value.copy(camera.matrixWorld);
+  uniforms.uTanHalfFov.value = Math.tan(THREE.MathUtils.degToRad(camera.fov*0.5));
+  uniforms.uAspect.value = camera.aspect;
+
+  composer.render();
+
+  // fps
+  frames++; fpsAccum += dt;
+  if(fpsAccum >= 0.5){
+    fps = Math.round(frames/fpsAccum);
+    fpsEl.textContent = fps + ' fps · ' + Math.round(qualityScale*100) + '% · ' + uniforms.uSteps.value + ' steps';
+    frames=0; fpsAccum=0;
+  }
+  adaptivePerf(dt);
+
+  if(!started){
+    started = true;
+    // hide loader after first successful frame
+    requestAnimationFrame(()=>{ loaderEl.classList.add('hidden');
+      setTimeout(()=>loaderEl.remove(), 900); });
+  }
+}
+animate();
+</script>
+</body>
+</html>

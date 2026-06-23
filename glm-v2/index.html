@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gargantua — Cinematic Black Hole</title>
+<style>
+:root{
+  --bg:#05060a;
+  --panel:rgba(14,17,26,0.55);
+  --panel-solid:#0e111a;
+  --border:rgba(255,255,255,0.08);
+  --fg:#e8ecf3;
+  --muted:#8a93a6;
+  --accent:#ff8a3c;
+  --accent2:#ffd07a;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--fg);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased}
+#c{display:block;width:100%;height:100%;cursor:grab}
+#c:active{cursor:grabbing}
+
+#loader{position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;z-index:100;transition:opacity .9s ease}
+#loader.hidden{opacity:0;pointer-events:none}
+.loader-inner{text-align:center}
+.spinner{width:42px;height:42px;border:2px solid rgba(255,255,255,.07);border-top-color:var(--accent);border-radius:50%;margin:0 auto 18px;animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.loader-title{font-size:14px;font-weight:600;letter-spacing:.18em;text-transform:uppercase;margin-bottom:6px}
+.loader-sub{font-size:11px;color:var(--muted);letter-spacing:.22em;text-transform:uppercase}
+
+#stats{position:fixed;top:18px;left:18px;font-size:10px;color:var(--muted);letter-spacing:.14em;z-index:10;font-variant-numeric:tabular-nums;text-transform:uppercase;pointer-events:none}
+#stats b{color:var(--fg);font-weight:600}
+
+#panel{position:fixed;top:18px;right:18px;width:268px;background:var(--panel);backdrop-filter:blur(22px) saturate(150%);-webkit-backdrop-filter:blur(22px) saturate(150%);border:1px solid var(--border);border-radius:14px;padding:18px 18px 16px;z-index:10;box-shadow:0 24px 60px rgba(0,0,0,.55),inset 0 1px 0 rgba(255,255,255,.04)}
+.p-head{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:14px}
+.p-tag{font-size:9px;letter-spacing:.28em;text-transform:uppercase;color:var(--muted)}
+.p-name{font-size:15px;font-weight:600;color:var(--fg);letter-spacing:.02em}
+.p-name span{color:var(--accent)}
+
+.control{margin-bottom:11px}
+.control:last-child{margin-bottom:0}
+.crow{display:flex;justify-content:space-between;align-items:center;margin-bottom:5px}
+.clabel{font-size:11px;color:var(--fg);opacity:.9}
+.cval{font-size:10px;color:var(--accent);font-variant-numeric:tabular-nums;background:rgba(255,138,60,.08);padding:1px 7px;border-radius:8px;letter-spacing:.04em}
+
+input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:3px;background:linear-gradient(to right,rgba(255,138,60,.5),rgba(255,255,255,.08) 60%);border-radius:2px;outline:none;cursor:pointer}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:13px;border-radius:50%;background:var(--accent);cursor:pointer;box-shadow:0 0 10px rgba(255,138,60,.65),0 0 0 3px rgba(255,138,60,.12);transition:transform .15s,box-shadow .15s}
+input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.18);box-shadow:0 0 16px rgba(255,138,60,.85),0 0 0 5px rgba(255,138,60,.18)}
+input[type=range]::-moz-range-thumb{width:13px;height:13px;border-radius:50%;border:none;background:var(--accent);cursor:pointer;box-shadow:0 0 10px rgba(255,138,60,.65)}
+
+.hint{position:fixed;bottom:18px;left:18px;font-size:10.5px;color:var(--muted);letter-spacing:.14em;z-index:10;pointer-events:none;text-transform:uppercase}
+.hint kbd{background:rgba(255,255,255,.06);border:1px solid var(--border);padding:2px 6px;border-radius:4px;font-family:inherit;font-size:9.5px;margin:0 3px;color:var(--fg)}
+
+.preset-row{display:flex;gap:6px;margin-top:14px;padding-top:12px;border-top:1px solid var(--border)}
+.preset{flex:1;font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;background:rgba(255,255,255,.04);border:1px solid var(--border);color:var(--fg);padding:6px 4px;border-radius:8px;cursor:pointer;transition:all .2s}
+.preset:hover{background:rgba(255,138,60,.12);border-color:rgba(255,138,60,.3);color:var(--accent2)}
+.preset.active{background:rgba(255,138,60,.18);border-color:rgba(255,138,60,.45);color:var(--accent2)}
+
+@media (max-width:720px){
+  #panel{width:calc(100% - 32px);right:16px;top:auto;bottom:60px}
+  #stats{top:14px;left:14px}
+}
+</style>
+</head>
+<body>
+  <div id="loader">
+    <div class="loader-inner">
+      <div class="spinner"></div>
+      <div class="loader-title">Gargantua</div>
+      <div class="loader-sub">Curving spacetime</div>
+    </div>
+  </div>
+  <canvas id="c"></canvas>
+  <div id="stats">—</div>
+  <div id="panel">
+    <div class="p-head">
+      <div class="p-name">Gargan<span>tua</span></div>
+      <div class="p-tag">Schwarzschild</div>
+    </div>
+    <div id="controls"></div>
+    <div class="preset-row">
+      <button class="preset" data-preset="cinematic">Cinematic</button>
+      <button class="preset" data-preset="hot">Hot Disk</button>
+      <button class="preset" data-preset="cold">Cold Halo</button>
+    </div>
+  </div>
+  <div class="hint">Drag · orbit &nbsp; Scroll · zoom &nbsp; <kbd>R</kbd> reset view</div>
+
+  <script type="importmap">
+  {
+    "imports":{
+      "three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+      "three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+
+  <script type="module">
+  import * as THREE from 'three';
+  import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+  import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+  import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+  import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+
+  // ---------- Renderer ----------
+  const canvas = document.getElementById('c');
+  const renderer = new THREE.WebGLRenderer({canvas, antialias:false, powerPreference:'high-performance'});
+  renderer.setPixelRatio(1);
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.0;
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+  // ---------- Scene (fullscreen quad) ----------
+  const scene = new THREE.Scene();
+  const cam = new THREE.OrthographicCamera(-1,1,1,-1,0,1);
+
+  const uniforms = {
+    time:{value:0},
+    cameraPos:{value:new THREE.Vector3()},
+    cameraMat:{value:new THREE.Matrix3()},
+    fov:{value:0.85},
+    resolution:{value:new THREE.Vector2(1,1)},
+    rs:{value:1.0},
+    diskBrightness:{value:1.7},
+    diskTemp:{value:1.0},
+    diskSpin:{value:0.8},
+    lensingStrength:{value:1.0},
+    exposure:{value:1.15}
+  };
+
+  const fragShader = /* glsl */`
+  precision highp float;
+  varying vec2 vUv;
+  uniform float time;
+  uniform vec3 cameraPos;
+  uniform mat3 cameraMat;
+  uniform float fov;
+  uniform vec2 resolution;
+  uniform float rs;
+  uniform float diskBrightness;
+  uniform float diskTemp;
+  uniform float diskSpin;
+  uniform float lensingStrength;
+  uniform float exposure;
+
+  const float FAR = 80.0;
+  const int STEPS = 240;
+
+  // ---------- hash / noise ----------
+  float hash11(float n){return fract(sin(n)*43758.5453123);}
+  vec3 hash33(vec3 p){
+    p = vec3(dot(p,vec3(127.1,311.7,74.7)),
+             dot(p,vec3(269.5,183.3,246.1)),
+             dot(p,vec3(113.5,271.9,124.6)));
+    return fract(sin(p)*43758.5453123);
+  }
+  float noise3(vec3 p){
+    vec3 i=floor(p); vec3 f=fract(p);
+    f=f*f*(3.0-2.0*f);
+    float n000=hash33(i+vec3(0.,0.,0.)).x;
+    float n100=hash33(i+vec3(1.,0.,0.)).x;
+    float n010=hash33(i+vec3(0.,1.,0.)).x;
+    float n110=hash33(i+vec3(1.,1.,0.)).x;
+    float n001=hash33(i+vec3(0.,0.,1.)).x;
+    float n101=hash33(i+vec3(1.,0.,1.)).x;
+    float n011=hash33(i+vec3(0.,1.,1.)).x;
+    float n111=hash33(i+vec3(1.,1.,1.)).x;
+    return mix(mix(mix(n000,n100,f.x),mix(n010,n110,f.x),f.y),
+               mix(mix(n001,n101,f.x),mix(n011,n111,f.x),f.y),f.z);
+  }
+  float fbm(vec3 p){
+    float a=0.0, w=0.5;
+    for(int i=0;i<4;i++){a+=w*noise3(p); p*=2.02; w*=0.5;}
+    return a;
+  }
+
+  // ---------- starfield ----------
+  vec3 starfield(vec3 dir){
+    vec3 col = vec3(0.0);
+    // layered stars
+    for(int layer=0; layer<3; layer++){
+      float scale = 130.0 * pow(1.7, float(layer));
+      vec3 p = dir * scale;
+      vec3 ip = floor(p);
+      vec3 fp = fract(p) - 0.5;
+      // 2x2x2 neighbor search to avoid edge cutoff
+      for(int dx=0; dx<=1; dx++)
+      for(int dy=0; dy<=1; dy++)
+      for(int dz=0; dz<=1; dz++){
+        vec3 off = vec3(float(dx),float(dy),float(dz));
+        vec3 cell = ip + off;
+        vec3 h = hash33(cell + float(layer)*19.7 + 7.3);
+        if(h.x > 0.975){
+          vec3 sp = h - 0.5;
+          float d = length(fp - (off - 0.5) - sp);
+          float bright = (h.x - 0.975)/0.025;
+          float intensity = exp(-d*d*55.0) * bright * 2.6;
+          vec3 sc = mix(vec3(0.65,0.78,1.0), vec3(1.0,0.88,0.7), h.y);
+          sc = mix(sc, vec3(1.0,0.55,0.45), pow(h.z,4.0)*0.4);
+          col += sc * intensity;
+        }
+      }
+    }
+    // nebula clouds
+    float n1 = fbm(dir*3.0 + vec3(0.0,0.0,time*0.015));
+    float n2 = fbm(dir*6.5 + vec3(11.0,5.0,0.0));
+    float neb = pow(max(n1-0.45,0.0),2.0) * 0.55;
+    vec3 nebCol = mix(vec3(0.18,0.08,0.32), vec3(0.08,0.22,0.42), n2);
+    nebCol = mix(nebCol, vec3(0.45,0.15,0.20), pow(n2,3.0)*0.4);
+    col += nebCol * neb;
+    // faint galactic band
+    float band = exp(-pow(dir.y*2.6,2.0));
+    float bandN = fbm(dir*9.0 + vec3(5.0,0.0,2.0));
+    col += vec3(0.18,0.20,0.32) * band * (bandN*0.6+0.4) * 0.09;
+    return col;
+  }
+
+  // ---------- blackbody-ish color ramp ----------
+  vec3 blackbody(float t){
+    t = clamp(t, 0.0, 2.2);
+    vec3 c;
+    c.r = smoothstep(0.05, 0.75, t);
+    c.g = smoothstep(0.32, 1.15, t) * 0.96;
+    c.b = smoothstep(0.85, 1.6, t);
+    // subtle warm rolloff at low temp
+    c += vec3(0.05,0.02,0.0) * smoothstep(0.5,0.0,t);
+    return c * 1.45;
+  }
+
+  // ---------- accretion disk ----------
+  vec3 sampleDisk(vec3 p){
+    float r = length(p.xz);
+    float rInner = rs * 2.6;   // ~ISCO
+    float rOuter = rs * 14.0;
+    if(r < rInner || r > rOuter) return vec3(0.0);
+
+    float angle = atan(p.z, p.x);
+
+    // Keplerian orbital speed (in units of c): v = sqrt(rs/(2r))
+    float v_orb = sqrt(0.5 * rs / max(r, rs*1.05));
+    v_orb = clamp(v_orb, 0.0, 0.7);
+
+    // prograde velocity direction in xz plane
+    vec3 velDir = vec3(-sin(angle), 0.0, cos(angle));
+    // direction from emission point toward observer
+    vec3 toObs = normalize(cameraPos - p);
+    float cosA = dot(velDir, toObs);
+
+    // relativistic Doppler factor
+    float beta = v_orb;
+    float gamma = 1.0 / sqrt(max(1.0 - beta*beta, 1e-3));
+    float doppler = 1.0 / (gamma * (1.0 - beta * cosA));
+
+    // gravitational redshift
+    float gravRedshift = sqrt(max(1.0 - rs / r, 1e-3));
+
+    // observed/emitted frequency ratio
+    float freqShift = doppler * gravRedshift;
+
+    // temperature profile (hotter inner) modulated by shift
+    float temp = diskTemp * 1.55 * (rInner / r) * pow(freqShift, 0.9);
+    vec3 color = blackbody(temp);
+
+    // intensity with relativistic beaming (~D^3) and gravitational dimming
+    float bright = diskBrightness * pow(rInner / r, 1.6);
+    bright *= pow(doppler, 2.6);
+    bright *= gravRedshift;
+
+    // turbulent spiral structure
+    float sp = angle*2.2 - log(r/rInner)*3.6 - time*diskSpin*0.45;
+    float spiral = 0.55 + 0.45*sin(sp);
+    float turb = fbm(vec3(p.xz*1.6, time*0.08 + r*0.3));
+    float density = mix(0.55, 1.5, turb) * spiral;
+
+    // edge fades
+    float edgeIn  = smoothstep(rInner, rInner*1.18, r);
+    float edgeOut = 1.0 - smoothstep(rOuter*0.72, rOuter, r);
+
+    return color * bright * density * edgeIn * edgeOut;
+  }
+
+  // ---------- main ----------
+  void main(){
+    vec2 uv = (gl_FragCoord.xy - 0.5*resolution) / resolution.y;
+    vec3 rayDir = normalize(cameraMat * vec3(uv * fov, -1.0));
+    vec3 pos = cameraPos;
+    vec3 vel = rayDir;
+
+    vec3 color = vec3(0.0);
+    float transmittance = 1.0;
+    bool captured = false;
+    bool escaped = false;
+
+    for(int i=0; i<STEPS; i++){
+      float r = length(pos);
+
+      if(r < rs){ captured = true; break; }
+      if(r > FAR){
+        color += starfield(normalize(vel)) * transmittance;
+        escaped = true; break;
+      }
+      // early-out: clearly outbound and far from strong field
+      if(r > 10.0*rs && dot(vel, pos) > 0.0 && float(i) > 12.0){
+        color += starfield(normalize(vel)) * transmittance;
+        escaped = true; break;
+      }
+
+      // adaptive step
+      float dt = clamp(0.09 * r, 0.025, 0.45);
+
+      // photon geodesic acceleration in Schwarzschild (affine parameter,
+      // |v|=1): a = -1.5 * rs * L^2 * r_hat / r^5
+      vec3 Lvec = cross(pos, vel);
+      float L2 = dot(Lvec, Lvec);
+      vec3 acc = -1.5 * rs * L2 * pos / pow(r, 5.0) * lensingStrength;
+
+      vec3 newPos = pos + vel*dt + 0.5*acc*dt*dt;
+      vec3 newVel = vel + acc*dt;
+      // enforce null condition |v|=1 to avoid drift
+      newVel = normalize(newVel);
+
+      // disk plane (y=0) crossing
+      if(pos.y * newPos.y < 0.0){
+        float t = -pos.y / (newPos.y - pos.y);
+        vec3 hitPos = mix(pos, newPos, t);
+        vec3 emit = sampleDisk(hitPos);
+        float emitL = length(emit);
+        float opacity = clamp(emitL * 0.28, 0.0, 0.88);
+        color += emit * transmittance;
+        transmittance *= (1.0 - opacity);
+        if(transmittance < 0.02){ escaped = true; break; }
+      }
+
+      pos = newPos;
+      vel = newVel;
+    }
+
+    if(!escaped && !captured){
+      color += starfield(normalize(vel)) * transmittance;
+    }
+    if(captured){
+      // photon fell in: what we accumulated so far is all we get
+    }
+
+    color *= exposure;
+    // subtle vignette
+    float vig = smoothstep(1.25, 0.35, length(uv));
+    color *= mix(0.82, 1.0, vig);
+
+    gl_FragColor = vec4(color, 1.0);
+  }
+  `;
+
+  const material = new THREE.ShaderMaterial({
+    uniforms,
+    vertexShader:`varying vec2 vUv; void main(){ vUv=uv; gl_Position=vec4(position.xy,0.0,1.0); }`,
+    fragmentShader:fragShader,
+    depthTest:false, depthWrite:false
+  });
+  const quad = new THREE.Mesh(new THREE.PlaneGeometry(2,2), material);
+  scene.add(quad);
+
+  // ---------- Post-processing ----------
+  const composer = new EffectComposer(renderer);
+  composer.addPass(new RenderPass(scene, cam));
+  const bloomPass = new UnrealBloomPass(new THREE.Vector2(1,1), 1.15, 0.78, 0.0);
+  bloomPass.threshold = 0.62;
+  composer.addPass(bloomPass);
+  composer.addPass(new OutputPass());
+
+  // ---------- Sizing ----------
+  let perfScale = 1.0;
+  function applySize(){
+    const w = Math.max(2, Math.floor(window.innerWidth * perfScale));
+    const h = Math.max(2, Math.floor(window.innerHeight * perfScale));
+    renderer.setSize(w, h, false);
+    composer.setSize(w, h);
+    bloomPass.setSize(w, h);
+    uniforms.resolution.value.set(w, h);
+    canvas.style.width = window.innerWidth + 'px';
+    canvas.style.height = window.innerHeight + 'px';
+  }
+  applySize();
+  window.addEventListener('resize', applySize);
+
+  // ---------- Camera orbit ----------
+  let theta = Math.PI*0.25;
+  let phi = Math.PI*0.42;
+  let dist = 14.0;
+  const targetTheta = {v:theta}, targetPhi = {v:phi}, targetDist = {v:dist};
+
+  function updateCamera(){
+    // smooth toward targets for inertia
+    theta += (targetTheta.v - theta) * 0.12;
+    phi   += (targetPhi.v   - phi)   * 0.12;
+    dist  += (targetDist.v  - dist)  * 0.12;
+
+    const cp = new THREE.Vector3(
+      dist * Math.sin(phi) * Math.cos(theta),
+      dist * Math.cos(phi),
+      dist * Math.sin(phi) * Math.sin(theta)
+    );
+    uniforms.cameraPos.value.copy(cp);
+    const fwd = cp.clone().multiplyScalar(-1).normalize();
+    const worldUp = new THREE.Vector3(0,1,0);
+    const right = new THREE.Vector3().crossVectors(fwd, worldUp).normalize();
+    if(right.lengthSq() < 1e-4) right.set(1,0,0);
+    const trueUp = new THREE.Vector3().crossVectors(right, fwd).normalize();
+    const m = new THREE.Matrix3();
+    m.set(right.x, trueUp.x, -fwd.x,
+          right.y, trueUp.y, -fwd.y,
+          right.z, trueUp.z, -fwd.z);
+    uniforms.cameraMat.value.copy(m);
+  }
+
+  // pointer controls
+  let dragging=false, lx=0, ly=0;
+  canvas.addEventListener('pointerdown', e=>{ dragging=true; lx=e.clientX; ly=e.clientY; canvas.setPointerCapture(e.pointerId); });
+  canvas.addEventListener('pointerup',   e=>{ dragging=false; });
+  canvas.addEventListener('pointermove', e=>{
+    if(!dragging) return;
+    const dx = e.clientX - lx, dy = e.clientY - ly;
+    targetTheta.v -= dx * 0.005;
+    targetPhi.v   -= dy * 0.005;
+    targetPhi.v = Math.max(0.06, Math.min(Math.PI-0.06, targetPhi.v));
+    lx = e.clientX; ly = e.clientY;
+  });
+  canvas.addEventListener('wheel', e=>{
+    e.preventDefault();
+    targetDist.v *= (1.0 + e.deltaY * 0.0011);
+    targetDist.v = Math.max(4.0, Math.min(40.0, targetDist.v));
+  }, {passive:false});
+
+  window.addEventListener('keydown', e=>{
+    if(e.key === 'r' || e.key === 'R'){
+      targetTheta.v = Math.PI*0.25;
+      targetPhi.v = Math.PI*0.42;
+      targetDist.v = 14.0;
+    }
+  });
+
+  // ---------- UI panel ----------
+  const controls = [
+    {name:'Schwarzschild Radius', key:'rs', min:0.5, max:2.4, step:0.01, val:1.0, fmt:v=>v.toFixed(2)},
+    {name:'Disk Brightness',      key:'diskBrightness', min:0.0, max:4.0, step:0.02, val:1.7, fmt:v=>v.toFixed(2)},
+    {name:'Disk Temperature',     key:'diskTemp', min:0.3, max:2.4, step:0.01, val:1.0, fmt:v=>v.toFixed(2)},
+    {name:'Disk Spin Speed',      key:'diskSpin', min:0.0, max:4.0, step:0.02, val:0.8, fmt:v=>v.toFixed(2)},
+    {name:'Lensing Strength',     key:'lensingStrength', min:0.0, max:1.5, step:0.01, val:1.0, fmt:v=>v.toFixed(2)},
+    {name:'Exposure',             key:'exposure', min:0.2, max:3.0, step:0.01, val:1.15, fmt:v=>v.toFixed(2)},
+    {name:'Bloom',                key:'bloom', min:0.0, max:3.0, step:0.02, val:1.15, fmt:v=>v.toFixed(2)},
+    {name:'Quality',              key:'quality', min:0.5, max:1.0, step:0.05, val:1.0, fmt:v=>v.toFixed(2)},
+  ];
+
+  const ctrlEls = {};
+  const container = document.getElementById('controls');
+  controls.forEach(c=>{
+    const d = document.createElement('div');
+    d.className = 'control';
+    d.innerHTML = `<div class="crow"><span class="clabel">${c.name}</span><span class="cval" id="cv-${c.key}">${c.fmt(c.val)}</span></div><input type="range" id="ci-${c.key}" min="${c.min}" max="${c.max}" step="${c.step}" value="${c.val}">`;
+    container.appendChild(d);
+    const input = d.querySelector('input');
+    const val = d.querySelector(`#cv-${c.key}`);
+    ctrlEls[c.key] = {input, val, c};
+    input.addEventListener('input', ()=>{
+      const v = parseFloat(input.value);
+      val.textContent = c.fmt(v);
+      if(c.key === 'bloom') bloomPass.strength = v;
+      else if(c.key === 'quality'){ perfScale = v; applySize(); }
+      else uniforms[c.key].value = v;
+    });
+  });
+
+  // presets
+  const presets = {
+    cinematic:{rs:1.0, diskBrightness:1.7, diskTemp:1.0, diskSpin:0.8, lensingStrength:1.0, exposure:1.15, bloom:1.15},
+    hot:{rs:1.0, diskBrightness:2.6, diskTemp:1.6, diskSpin:1.4, lensingStrength:1.0, exposure:1.25, bloom:1.6},
+    cold:{rs:1.2, diskBrightness:1.1, diskTemp:0.55, diskSpin:0.4, lensingStrength:1.2, exposure:1.4, bloom:0.9}
+  };
+  document.querySelectorAll('.preset').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      document.querySelectorAll('.preset').forEach(b=>b.classList.remove('active'));
+      btn.classList.add('active');
+      const p = presets[btn.dataset.preset];
+      for(const k in p){
+        const el = ctrlEls[k];
+        if(!el) continue;
+        el.input.value = p[k];
+        el.val.textContent = el.c.fmt(p[k]);
+        if(k === 'bloom') bloomPass.strength = p[k];
+        else uniforms[k].value = p[k];
+      }
+    });
+  });
+  document.querySelector('.preset[data-preset="cinematic"]').classList.add('active');
+
+  // ---------- Adaptive quality ----------
+  let frames=0, fpsAccum=0, lastT = performance.now();
+  const statsEl = document.getElementById('stats');
+
+  // ---------- Animation ----------
+  const clock = new THREE.Clock();
+  let firstFrame = true;
+  const loader = document.getElementById('loader');
+
+  function tick(){
+    requestAnimationFrame(tick);
+    const dt = Math.min(clock.getDelta(), 0.05);
+    uniforms.time.value += dt;
+    updateCamera();
+    composer.render();
+
+    // stats + adaptive quality
+    frames++; fpsAccum += dt;
+    if(fpsAccum >= 0.75){
+      const fps = frames / fpsAccum;
+      statsEl.innerHTML = `<b>${fps.toFixed(0)}</b> fps · scale <b>${perfScale.toFixed(2)}</b> · ${renderer.getContext().getParameter(renderer.getContext().MAX_TEXTURE_SIZE)>0?'gpu':''}`;
+      // auto scale down on weak GPUs (only if user hasn't manually set quality below 1)
+      const qCtrl = ctrlEls.quality;
+      if(parseFloat(qCtrl.input.value) >= 1.0){
+        if(fps < 42 && perfScale > 0.55){ perfScale -= 0.08; applySize(); qCtrl.input.value = perfScale.toFixed(2); qCtrl.val.textContent = perfScale.toFixed(2); }
+        else if(fps > 58 && perfScale < 1.0){ perfScale += 0.05; applySize(); qCtrl.input.value = perfScale.toFixed(2); qCtrl.val.textContent = perfScale.toFixed(2); }
+      }
+      frames=0; fpsAccum=0;
+    }
+
+    if(firstFrame){
+      firstFrame = false;
+      // delay hide so first painted frame is visible
+      requestAnimationFrame(()=>{ loader.classList.add('hidden'); setTimeout(()=>loader.remove(), 1000); });
+    }
+  }
+
+  // hide loader fallback
+  setTimeout(()=>{ if(firstFrame){ firstFrame=false; loader.classList.add('hidden'); } }, 4000);
+
+  tick();
+  </script>
+</body>
+</html>
