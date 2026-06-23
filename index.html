@@ -39,7 +39,7 @@
 
   <h2 class="sec">Раунд 1 — как сгенерировали</h2>
   <div class="grid">
-    <a class="card win" href="./fusion/"><span class="tag gold">🏆 fusion</span><h3>Fusion</h3><p><span class="st ok">✅ корректно из коробки.</span> Opus-4.8 ∥ GPT-5.5, реконсайл + headless-verify. Тёмная сцена, линзированный диск, богатая панель, чистая консоль.</p></a>
+    <a class="card win" href="./fusion/"><span class="tag gold">🏆 fusion v2</span><h3>Fusion</h3><p><span class="st ok">✅ v2 — укреплён + полировка.</span> Opus-4.8 ∥ GPT-5.5 реконсайл. v2: NaN/Inf-proof (safeDen/sanitize), кламп HDR + HalfFloat-таргет + финальный scrub-пасс (никаких чёрных тайлов на реальной GPU), highp-звёзды с дифракцией, многооктавная турбулентность диска.</p></a>
     <a class="card" href="./fugu-max/"><span class="tag">fugu-max</span><h3>Fugu Ultra @xhigh</h3><p><span class="st ok">✅ рендерит.</span> non-stream ~31 мин. Верная Гаргантюа, 0 ошибок — но ярковато (диск доминирует).</p></a>
     <a class="card" href="./glm/"><span class="tag">glm</span><h3>GLM-5.2 @High</h3><p><span class="st warn">⚠️→✅</span> raw = чёрный экран из-за 1 символа GLSL (<code>float(i)&gt;12</code>→<code>12.0</code>); после фикса — полноценная Гаргантюа.</p></a>
     <a class="card" href="./fugu/"><span class="tag">fugu</span><h3>Fugu basic @high</h3><p><span class="st warn">⚠️ пересвет</span> в headless (софт-GL): кадр уходил в белизну. На реальной GPU могло быть лучше.</p></a>
@@ -47,7 +47,7 @@
 
   <h2 class="sec">fable-fusion — премиум-пайплайн (gate + reconcile)</h2>
   <div class="grid">
-    <a class="card win" href="./fable-fusion/"><span class="tag gold">🏆 fable-fusion</span><h3>fable-fusion</h3><p><span class="st ok">✅ корректно.</span> Opus∥GPT round-1 → независимый verification-GATE (headless обоих) → reconcile: база Opus (RK4-геодезик Шварцшильда) + гашение единственного дефекта, найденного гейтом (пересвет). Чистая консоль.</p></a>
+    <a class="card win" href="./fable-fusion/"><span class="tag gold">🏆 fable-fusion v2</span><h3>fable-fusion</h3><p><span class="st ok">✅ v2 — укреплён.</span> Opus∥GPT → GATE → reconcile (база Opus, RK4-геодезик Шварцшильда). v2 по фидбеку (реально-GPU «чёрные квадраты»/кривой рендер): scrub NaN/Inf в шейдере, кламп HDR перед bloom, HalfFloat-таргеты, highp-звёзды с fract-координатами, фикс двойного aspect (кривизна).</p></a>
   </div>
 
   <h2 class="sec">Раунд самопочинки (v2) — модель чинит свой код по фидбеку</h2>

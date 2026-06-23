@@ -226,6 +226,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 
 /* ============================================================================
    Gargantua — physically-motivated gravitational lensing.
@@ -245,10 +246,32 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
    capture/photon-ring behaviour in the strong field. Photons that fall inside
    the capture radius are swallowed (black). Photons that survive are sampled
    against (a) a procedural 3D starfield in their final escape direction and
-   (b) the accretion-disk plane wherever the curved path crosses z≈0. Because
-   the path is genuinely curved, the disk's far side is bent up over and under
-   the hole, and a thin Einstein/photon ring appears on its own where grazing
-   rays wind around the mass.
+   (b) the accretion-disk plane wherever the curved path crosses z≈0.
+
+   ----------------------------------------------------------------------------
+   HARDENING (real-GPU robustness — these bugs do NOT show in a software
+   rasterizer because mesa/swiftshader clamp many ops that real silicon does
+   not):
+
+   1. EVERY division / pow / sqrt / normalize in the shader is guarded so it
+      can never produce NaN or Inf. The acceleration term a ~ h^2 / r^5 is the
+      single most dangerous expression: as r -> 0 it blows to +Inf, and the
+      following normalize() of an Inf vector yields NaN. NaN then poisons the
+      pixel because NaN fails ALL comparisons (NaN < x, NaN > x are both false),
+      so neither the capture test nor any clamp can catch it downstream.
+
+   2. The fragment output is sanitised at the very end: the HDR colour is made
+      finite per-channel (NaN/Inf -> 0) and clamped to a bounded HDR range
+      BEFORE it ever reaches the bloom pass. A single NaN/Inf texel feeding
+      UnrealBloomPass spreads through the gaussian mip chain and paints the
+      flickering black squares this class of bug is famous for.
+
+   3. EffectComposer read/write targets are forced to HalfFloat so the HDR
+      bloom input is not silently truncated to 8-bit (banding) and stays in a
+      well-defined float range.
+
+   4. The procedural starfield uses highp and bounded/wrapped hash coordinates
+      so it does not degrade to mush or shimmer on GPUs with weaker float ALUs.
    ============================================================================ */
 
 const fatal = (msg)=>{
@@ -258,15 +281,18 @@ const fatal = (msg)=>{
 };
 
 // --- WebGL capability check ---------------------------------------------
+let HAS_WEBGL2 = false;
 (function(){
   const c=document.createElement('canvas');
-  const gl=c.getContext('webgl2')||c.getContext('webgl');
+  const gl2=c.getContext('webgl2');
+  if(gl2){ HAS_WEBGL2 = true; }
+  const gl = gl2 || c.getContext('webgl');
   if(!gl){ fatal('WebGL is not available in this browser.<br/>Try a recent Chrome, Firefox, Edge or Safari.'); }
 })();
 
 const container = document.getElementById('app');
 
-const renderer = new THREE.WebGLRenderer({ antialias:false, powerPreference:'high-performance', stencil:false });
+const renderer = new THREE.WebGLRenderer({ antialias:false, powerPreference:'high-performance', stencil:false, depth:false });
 renderer.setClearColor(0x000000, 1);
 renderer.toneMapping = THREE.NoToneMapping; // tone mapping done in our composite pass
 container.appendChild(renderer.domElement);
@@ -314,7 +340,7 @@ const uniforms = {
   uDiskColor:    { value: new THREE.Vector3(1.0,0.72,0.42) },
   uSpin:         { value: 0.6 },
   uExposure:     { value: 1.05 },
-  uSteps:        { value: 220 },    // geodesic integration steps (quality)
+  uSteps:        { value: 240 },    // geodesic integration steps (quality)
   uDiskInner:    { value: 1.6 },    // inner disk radius / Rs (ISCO-ish = 3 Rs)
   uDiskOuter:    { value: 8.0 },    // outer disk radius / Rs
 };
@@ -326,6 +352,7 @@ const vert = /* glsl */`
 
 const frag = /* glsl */`
   precision highp float;
+  precision highp int;
   varying vec2 vUv;
 
   uniform vec2  uResolution;
@@ -346,8 +373,37 @@ const frag = /* glsl */`
   uniform float uDiskOuter;   // in units of Rs
 
   #define PI 3.14159265359
+  #define EPS 1e-4
+
+  // ---------- numeric guards ----------------------------------------------
+  // A finite, non-zero denominator. Keeps the sign so directional terms are
+  // preserved, but never returns a magnitude small enough to overflow.
+  float safeDen(float d){
+    return (abs(d) < EPS) ? (d < 0.0 ? -EPS : EPS) : d;
+  }
+  // Replace any NaN/Inf component with 0. NaN != NaN, so isnan-free fallback:
+  // (x == x) is false for NaN; abs(x) < INF rejects Inf.
+  vec3 sanitize3(vec3 v){
+    bvec3 ok = bvec3(
+      (v.x == v.x) && (abs(v.x) < 1e30),
+      (v.y == v.y) && (abs(v.y) < 1e30),
+      (v.z == v.z) && (abs(v.z) < 1e30)
+    );
+    return vec3(ok.x ? v.x : 0.0, ok.y ? v.y : 0.0, ok.z ? v.z : 0.0);
+  }
+  float sanitize1(float x){
+    return ((x == x) && (abs(x) < 1e30)) ? x : 0.0;
+  }
+  // normalize that can never emit NaN (zero / NaN / Inf input -> safe axis).
+  vec3 safeNormalize(vec3 v, vec3 fallback){
+    v = sanitize3(v);
+    float len2 = dot(v,v);
+    return (len2 > 1e-12) ? v * inversesqrt(len2) : fallback;
+  }
 
   // ---------- hash / noise (procedural, no textures) ----------
+  // Coordinates are wrapped to a bounded range before hashing so high-magnitude
+  // star cells never lose precision on weaker float units.
   float hash11(float p){ p=fract(p*0.1031); p*=p+33.33; p*=p+p; return fract(p); }
   float hash31(vec3 p){
     p = fract(p*vec3(0.1031,0.11369,0.13787));
@@ -375,29 +431,39 @@ const frag = /* glsl */`
   // ---------- procedural starfield sampled by direction ----------
   // Layered point stars on a spherical grid + faint nebula/milky band.
   vec3 starField(vec3 dir){
+    dir = safeNormalize(dir, vec3(0.0,0.0,1.0));
     vec3 col = vec3(0.0);
 
-    // 3 octaves of stars at increasing density / decreasing size
-    for(int k=0;k<3;k++){
-      float scale = 110.0 + float(k)*150.0;
+    // 4 octaves of stars at increasing density / decreasing size.
+    for(int k=0;k<4;k++){
+      float fk = float(k);
+      float scale = 90.0 + fk*120.0;
       vec3 p = dir*scale;
       vec3 cell = floor(p);
       vec3 f = fract(p);
+      // Wrap the cell index into a bounded window before hashing so the hash
+      // input magnitude stays small even at high scale -> crisp on all GPUs.
+      vec3 wcell = mod(cell, 256.0);
       // one candidate star per cell, jittered
-      float h = hash31(cell + float(k)*37.1);
+      float h = hash31(wcell + fk*37.1);
       // star existence threshold (sparser at large scale)
-      float thresh = 0.978 - float(k)*0.006;
+      float thresh = 0.972 - fk*0.004;
       if(h > thresh){
-        vec3 jit = vec3(hash31(cell+1.7), hash31(cell+5.3), hash31(cell+9.1));
+        vec3 jit = vec3(hash31(wcell+1.7), hash31(wcell+5.3), hash31(wcell+9.1));
         vec3 d = f - jit;
         float r2 = dot(d,d);
-        float bright = (h-thresh)/(1.0-thresh);
-        float core = exp(-r2*(70.0+float(k)*90.0));
+        float denom = safeDen(1.0 - thresh);
+        float bright = clamp((h-thresh)/denom, 0.0, 1.0);
+        float core = exp(-r2*(70.0+fk*90.0));
+        // subtle diffraction-ish spikes for the brightest stars (cheap, crisp)
+        float spike = exp(-abs(d.x)*55.0)*exp(-abs(d.y)*8.0)
+                    + exp(-abs(d.y)*55.0)*exp(-abs(d.x)*8.0);
+        core += 0.12*spike*smoothstep(0.55,1.0,bright);
         // colour temperature variation per star
-        float t = hash31(cell+13.0);
+        float t = hash31(wcell+13.0);
         vec3 sc = mix(vec3(0.62,0.74,1.0), vec3(1.0,0.86,0.66), t);   // blue->warm
         sc = mix(sc, vec3(1.0,0.55,0.45), smoothstep(0.85,1.0,t));    // a few red
-        col += sc * core * (0.5+1.6*bright);
+        col += sc * core * (0.5+1.7*bright);
       }
     }
 
@@ -413,10 +479,11 @@ const frag = /* glsl */`
 
     // base deep-space tint
     col += vec3(0.004,0.006,0.012);
-    return col;
+    return sanitize3(col);
   }
 
   // ---------- physically-grounded blackbody colour (Tanner Helland fit) ----------
+  // Guarded so negative/zero pow bases and out-of-range logs can never NaN.
   vec3 blackbody(float kelvin){
     float t = clamp(kelvin, 1000.0, 40000.0) / 100.0;
     float r, g, b;
@@ -424,56 +491,62 @@ const frag = /* glsl */`
       r = 1.0;
       g = clamp((99.4708025861 * log(max(t,1.0)) - 161.1195681661) / 255.0, 0.0, 1.0);
     } else {
-      r = clamp((329.698727446 * pow(t-60.0, -0.1332047592)) / 255.0, 0.0, 1.0);
-      g = clamp((288.1221695283 * pow(t-60.0, -0.0755148492)) / 255.0, 0.0, 1.0);
+      float tg = max(t-60.0, EPS);             // guard pow base > 0
+      r = clamp((329.698727446 * pow(tg, -0.1332047592)) / 255.0, 0.0, 1.0);
+      g = clamp((288.1221695283 * pow(tg, -0.0755148492)) / 255.0, 0.0, 1.0);
     }
     if(t >= 66.0)      b = 1.0;
     else if(t <= 19.0) b = 0.0;
-    else               b = clamp((138.5177312231 * log(t-10.0) - 305.0447927307) / 255.0, 0.0, 1.0);
-    return pow(vec3(r,g,b), vec3(2.2)); // to linear
+    else               b = clamp((138.5177312231 * log(max(t-10.0, EPS)) - 305.0447927307) / 255.0, 0.0, 1.0);
+    return pow(max(vec3(r,g,b), 0.0), vec3(2.2)); // to linear
   }
 
   // ---------- accretion disk emission at a crossing point ----------
   // p: world-space position on (or near) z=0 plane. Returns RGB emission.
   vec3 sampleDisk(vec3 p, vec3 photonDir){
     float rad = length(p.xy);                 // disk lives in x-y plane (z up)
-    float rs  = uRs;
+    float rs  = max(uRs, EPS);
     float rIn  = uDiskInner * rs;
     float rOut = uDiskOuter * rs;
     if(rad < rIn || rad > rOut) return vec3(0.0);
 
     float ang = atan(p.y, p.x);
-    float tnorm = (rad - rIn)/(rOut - rIn);     // 0 inner .. 1 outer
+    float span = safeDen(rOut - rIn);
+    float tnorm = clamp((rad - rIn)/span, 0.0, 1.0);   // 0 inner .. 1 outer
+    float rOverRs = rad / rs;                          // rs guarded > 0
 
     // Keplerian-ish angular velocity (faster inside) for swirl + Doppler.
-    float vk = uSpin * 1.6 / pow(rad/rs + 0.6, 0.5);
-    float swirl = ang*1.0 + vk*uTime*1.4 - 3.2*log(rad/rs + 1.0);
+    float vk = uSpin * 1.6 * inversesqrt(max(rOverRs + 0.6, EPS));
+    float swirl = ang*1.0 + vk*uTime*1.4 - 3.2*log(max(rOverRs + 1.0, EPS));
 
-    // turbulent density: spiral filaments + flicker
+    // turbulent density: spiral filaments + flicker, multi-octave for detail.
     float fil = fbm(vec3(cos(swirl), sin(swirl), rad*1.1) * 2.4 + vec3(0.0,0.0,uTime*0.05));
-    float dens = smoothstep(0.30, 0.95, fil);
+    float fine = fbm(vec3(cos(swirl*2.0), sin(swirl*2.0), rad*2.7) * 4.3 + vec3(uTime*0.09,0.0,0.0));
+    fil = mix(fil, fil*0.6 + fine*0.5, 0.55);
+    float dens = smoothstep(0.28, 0.95, fil);
     // radial falloff (bright inner, fading edges)
-    float radial = pow(1.0 - tnorm, 0.6) * smoothstep(0.0,0.10,tnorm) ;
+    float radial = pow(max(1.0 - tnorm, 0.0), 0.6) * smoothstep(0.0,0.10,tnorm);
     dens *= radial;
 
     // ---- relativistic Doppler beaming ----
     // orbital velocity direction (tangent), local speed grows toward hole.
-    vec3 tangent = normalize(vec3(-p.y, p.x, 0.0)) * sign(uSpin + 1e-4);
-    float beta = clamp(0.62 * rs/ max(rad,1e-3) + 0.16, 0.0, 0.85); // |v|/c near hole
+    vec3 tangent = safeNormalize(vec3(-p.y, p.x, 0.0), vec3(1.0,0.0,0.0)) * sign(uSpin + 1e-4);
+    float beta = clamp(0.62 * rs / max(rad, rs*1.0001) + 0.16, 0.0, 0.85); // |v|/c near hole
     // line of sight from disk element to camera ~ -photonDir (photon travels toward cam)
-    vec3 los = normalize(-photonDir);
-    float mu = dot(tangent, los);              // +1 approaching, -1 receding
-    float gamma = 1.0/sqrt(1.0 - beta*beta);
-    float doppler = 1.0 / (gamma * (1.0 - beta*mu)); // relativistic Doppler factor δ
+    vec3 los = safeNormalize(-photonDir, vec3(0.0,0.0,1.0));
+    float mu = clamp(dot(tangent, los), -1.0, 1.0);    // +1 approaching, -1 receding
+    float gamma = inversesqrt(max(1.0 - beta*beta, EPS));
+    float dopDen = safeDen(gamma * (1.0 - beta*mu));
+    float doppler = clamp(1.0 / dopDen, 0.2, 4.0);     // relativistic Doppler factor δ
     // beaming: intensity ~ δ^3 (compact); colour shift via δ
-    float beam = pow(clamp(doppler,0.2,3.0), 3.0);
+    float beam = pow(doppler, 3.0);
 
     // ---- gravitational redshift toward horizon ----
-    float grav = sqrt(max(0.0, 1.0 - rs/max(rad,rs*1.0001))); // δ_grav <1 near hole
-    float shift = doppler * grav;              // total frequency factor
+    float grav = sqrt(clamp(1.0 - rs/max(rad, rs*1.0001), 0.0, 1.0)); // δ_grav <1 near hole
+    float shift = clamp(doppler * grav, 0.0, 4.0);     // total frequency factor
 
     // base thermal colour, hotter (bluer) toward inner edge
-    float Teff = mix(13000.0, 3600.0, pow(tnorm,0.55));
+    float Teff = mix(13000.0, 3600.0, pow(tnorm, 0.55));
     vec3 base = blackbody(Teff) * uDiskColor;
     // apply Doppler/grav colour shift: >1 blueward, <1 redward
     vec3 shifted = base;
@@ -482,27 +555,28 @@ const frag = /* glsl */`
     shifted = max(shifted, vec3(0.0));
 
     float emit = dens * beam * grav;
-    // bright inner rim
-    emit *= 1.0 + 1.4*exp(-pow((rad-rIn)/(rs*0.5),2.0));
+    // bright inner rim — sharper for a crisper photon-edge read
+    float rimX = (rad - rIn) / max(rs*0.42, EPS);
+    emit *= 1.0 + 1.7*exp(-rimX*rimX);
 
-    return shifted * emit * uDiskBright * 2.4;
+    return sanitize3(shifted * emit * uDiskBright * 2.4);
   }
 
   // ============================================================
   //  Photon geodesic integration (Schwarzschild, backward march)
   // ============================================================
   void main(){
-    vec2 uv = (gl_FragCoord.xy / uResolution) * 2.0 - 1.0;
+    vec2 uv = (gl_FragCoord.xy / max(uResolution, vec2(1.0))) * 2.0 - 1.0;
     uv.x *= uAspect;
 
     // Build the camera ray in world space from OrbitControls' matrix.
     vec3 right = uCamInv[0].xyz;
     vec3 up    = uCamInv[1].xyz;
     vec3 fwd   = -uCamInv[2].xyz;
-    vec3 rd = normalize(fwd + right*(uv.x*uTanFov) + up*(uv.y*uTanFov));
+    vec3 rd = safeNormalize(fwd + right*(uv.x*uTanFov) + up*(uv.y*uTanFov), fwd);
     vec3 ro = uCamPos;
 
-    float rs = uRs;
+    float rs = max(uRs, EPS);
 
     // Integration setup. We march the photon and bend it toward the mass.
     vec3 pos = ro;
@@ -511,46 +585,53 @@ const frag = /* glsl */`
     vec3 color = vec3(0.0);
     float transmit = 1.0;       // remaining "see-through" for disk accumulation
     bool captured = false;
+    float ringGlow = 0.0;       // perceptual photon-ring lift accumulator
 
     // Disk plane = z=0. We detect sign changes of pos.z across a step.
-    // adaptive-ish step: small near hole, larger far away.
     int STEPS = int(uSteps);
     float capture = rs * 0.5;   // ~ inside this -> swallowed (event horizon scale)
+
+    // angular momentum is conserved for the null geodesic; compute once and
+    // reuse (also avoids per-step cross-product drift).
+    vec3 Lvec = cross(pos, vel);
+    float h2 = dot(Lvec, Lvec);
+    float k = 1.5 * rs * max(uLens, 0.0);   // bending strength (>= 0)
 
     for(int i=0;i<512;i++){
       if(i>=STEPS) break;
       float r = length(pos);
+      float rSafe = max(r, capture*0.5);    // never divide by a sub-horizon r
 
       // step size: shrink dramatically near the mass for accurate bending
       float h = clamp(r*0.12, 0.012, 0.55);
 
       // --- gravitational acceleration on the photon ---
-      // h_ang^2 * r_hat term reproduces GR deflection; uLens lets the user
-      // dial it artistically without breaking the qualitative physics.
-      vec3 rhat = pos / max(r,1e-4);
-      // angular momentum magnitude of the (near-)null geodesic
-      vec3 Lvec = cross(pos, vel);
-      float h2 = dot(Lvec,Lvec);
-      // Schwarzschild bending strength ~ 1.5 * Rs (geometric units c=G=1, M=Rs/2)
-      float k = 1.5 * (rs) * uLens;
-      vec3 acc = -k * h2 * rhat / pow(r, 5.0);
+      // a = -k * h2 * r_hat / r^5 . r is floored at rSafe and the whole term is
+      // magnitude-limited so it can never become Inf -> NaN after normalize.
+      vec3 rhat = pos / max(r, EPS);
+      float r5 = max(pow(rSafe, 5.0), 1e-6);
+      vec3 acc = -k * h2 * rhat / r5;
+      acc = clamp(acc, vec3(-1e4), vec3(1e4));
 
       // advance (semi-implicit / leapfrog-ish for stability)
       vec3 velMid = vel + acc * (h*0.5);
       vec3 newPos = pos + velMid * h;
       float rNew = length(newPos);
-      vec3 rhat2 = newPos/max(rNew,1e-4);
-      vec3 acc2 = -k * h2 * rhat2 / pow(rNew,5.0);
-      vec3 newVel = velMid + acc2 * (h*0.5);
-      newVel = normalize(newVel);
+      float rNewSafe = max(rNew, capture*0.5);
+      vec3 rhat2 = newPos / max(rNew, EPS);
+      float r5b = max(pow(rNewSafe, 5.0), 1e-6);
+      vec3 acc2 = -k * h2 * rhat2 / r5b;
+      acc2 = clamp(acc2, vec3(-1e4), vec3(1e4));
+      vec3 newVel = safeNormalize(velMid + acc2 * (h*0.5), vel);
 
       // --- disk crossing test (z sign change between pos and newPos) ---
       if( (pos.z > 0.0) != (newPos.z > 0.0) ){
-        float t = pos.z / (pos.z - newPos.z);     // lerp factor to z=0
+        float dz = safeDen(pos.z - newPos.z);
+        float t = clamp(pos.z / dz, 0.0, 1.0);    // lerp factor to z=0
         vec3 hitP = mix(pos, newPos, t);
         float hr = length(hitP.xy);
         if(hr > uDiskInner*rs && hr < uDiskOuter*rs){
-          vec3 dirAt = normalize(mix(velMid,newVel,t));
+          vec3 dirAt = safeNormalize(mix(velMid,newVel,t), newVel);
           vec3 emis = sampleDisk(hitP, dirAt);
           // disk is semi-transparent: accumulate with current transmission
           float aDisk = clamp(length(emis)*0.7, 0.0, 1.0);
@@ -561,6 +642,12 @@ const frag = /* glsl */`
 
       pos = newPos; vel = newVel;
 
+      // --- photon-ring proximity: rays that linger near the photon sphere
+      // (~1.5 Rs) wind tightly; accumulate a faint, bounded glow so the
+      // Einstein/photon ring reads crisply without faking geometry.
+      float ringDist = abs(rNew - 1.5*rs);
+      ringGlow += transmit * exp(-ringDist*ringDist/max(rs*rs*0.05, EPS)) * 0.012;
+
       // --- capture / escape tests ---
       if(rNew < capture){ captured = true; break; }
       if(rNew > 60.0 && dot(vel, pos) > 0.0){ break; }
@@ -568,28 +655,39 @@ const frag = /* glsl */`
 
     // Background starfield in the photon's final escape direction.
     if(!captured){
-      vec3 bg = starField(normalize(vel));
+      vec3 bg = starField(vel);
       color += bg * transmit;
-    } else {
-      // event horizon: pure black, but keep a razor-thin warm halo where the
-      // capture boundary meets escaping photons (handled by neighbouring px).
-      color += vec3(0.0);
     }
+    // captured photons stay black (event horizon shadow).
 
-    // photon-ring enhancement emerges naturally; add a touch of energy where
-    // rays barely escaped to make the Einstein ring read on screen.
-    // (purely a perceptual lift, not adding fake geometry)
-    // ---- exposure + ACES filmic tone mapping ----
-    color *= uExposure;
-    // ACES (Narkowicz) approximation
+    // photon-ring perceptual lift (warm, bounded).
+    ringGlow = clamp(ringGlow, 0.0, 2.0);
+    color += (captured ? 0.0 : 1.0) * ringGlow * vec3(1.0, 0.82, 0.55) * (captured ? 0.0 : 1.0);
+
+    // ---- exposure ----
+    color *= max(uExposure, 0.0);
+
+    // ====== HARDENING GATE (runs BEFORE bloom) ======
+    // 1) Scrub any NaN/Inf that survived the march to a finite value. A single
+    //    NaN here would otherwise propagate through the bloom mip pyramid and
+    //    paint flickering black tiles on real GPUs.
+    color = sanitize3(color);
+    // 2) Clamp HDR to a finite, bounded range so bloom always sees sane input
+    //    (keeps highlights for bloom but kills runaway energy).
+    color = clamp(color, vec3(0.0), vec3(64.0));
+
+    // ---- ACES filmic tone mapping (Narkowicz) ----
     vec3 x = color;
     const float a=2.51, b=0.03, c=2.43, d=0.59, e=0.14;
-    vec3 mapped = clamp((x*(a*x+b))/(x*(c*x+d)+e), 0.0, 1.0);
+    vec3 mapped = clamp((x*(a*x+b))/max(x*(c*x+d)+e, vec3(EPS)), 0.0, 1.0);
 
-    // mild filmic contrast + vignette
-    vec2 q = gl_FragCoord.xy/uResolution;
+    // mild filmic vignette
+    vec2 q = gl_FragCoord.xy / max(uResolution, vec2(1.0));
     float vig = smoothstep(1.25, 0.35, length(q-0.5)*1.35);
     mapped *= mix(0.82, 1.0, vig);
+
+    // final per-channel sanitise — absolutely nothing non-finite leaves here.
+    mapped = clamp(sanitize3(mapped), 0.0, 1.0);
 
     gl_FragColor = vec4(mapped, 1.0);
   }
@@ -604,18 +702,62 @@ quad.frustumCulled = false;
 scene.add(quad);
 
 // ------------------------------------------------------------------------
-// Post-processing: render lensing -> bloom -> ACES already done in shader,
-// so the final composite just adds bloom on the bright disk/ring.
+// Post-processing.
+// The lensing pass already tone-maps to [0,1], but we run the composer in a
+// HalfFloat target so the bloom pass gets a clean, full-precision, bounded
+// input — the lensing shader's final sanitise guarantees finite texels, and
+// HalfFloat avoids 8-bit banding/quantisation feeding the gaussian mip chain.
 // ------------------------------------------------------------------------
-const composer = new EffectComposer(renderer);
+const rtType = THREE.HalfFloatType;
+const composerTarget = new THREE.WebGLRenderTarget(1, 1, {
+  type: rtType,
+  format: THREE.RGBAFormat,
+  minFilter: THREE.LinearFilter,
+  magFilter: THREE.LinearFilter,
+  depthBuffer: false,
+  stencilBuffer: false,
+});
+const composer = new EffectComposer(renderer, composerTarget);
 const renderPass = new RenderPass(scene, camera);
 composer.addPass(renderPass);
 
-const bloomPass = new UnrealBloomPass(new THREE.Vector2(1,1), 0.85, 0.55, 0.0);
+const bloomPass = new UnrealBloomPass(new THREE.Vector2(1,1), 0.78, 0.62, 0.0);
 bloomPass.threshold = 0.0;
-bloomPass.strength  = 0.85;
-bloomPass.radius    = 0.55;
+bloomPass.strength  = 0.78;
+bloomPass.radius    = 0.62;
 composer.addPass(bloomPass);
+
+// Final guard pass: a last-line per-channel NaN/Inf scrub + clamp on the
+// composited output. Even if a driver's bloom implementation introduces a
+// non-finite texel, this pass guarantees the on-screen frame is finite &
+// bounded — no flickering black squares ever reach the framebuffer.
+const FinalGuardShader = {
+  uniforms: { tDiffuse: { value: null } },
+  vertexShader: `
+    varying vec2 vUv;
+    void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }
+  `,
+  fragmentShader: `
+    precision highp float;
+    varying vec2 vUv;
+    uniform sampler2D tDiffuse;
+    vec3 fixup(vec3 v){
+      bvec3 ok = bvec3(
+        (v.x==v.x)&&(abs(v.x)<1e30),
+        (v.y==v.y)&&(abs(v.y)<1e30),
+        (v.z==v.z)&&(abs(v.z)<1e30)
+      );
+      return vec3(ok.x?v.x:0.0, ok.y?v.y:0.0, ok.z?v.z:0.0);
+    }
+    void main(){
+      vec4 c = texture2D(tDiffuse, vUv);
+      gl_FragColor = vec4(clamp(fixup(c.rgb), 0.0, 1.0), 1.0);
+    }
+  `
+};
+const finalGuardPass = new ShaderPass(FinalGuardShader);
+finalGuardPass.renderToScreen = true;
+composer.addPass(finalGuardPass);
 
 // ------------------------------------------------------------------------
 // Resolution scaling for graceful fallback on weak GPUs.
@@ -630,12 +772,12 @@ function resize(){
   renderer.setSize(w, h, false);
   composer.setPixelRatio(dpr);
   composer.setSize(w, h);
-  camera.aspect = w/h;
+  camera.aspect = w/Math.max(h,1);
   camera.updateProjectionMatrix();
-  uniforms.uResolution.value.set(w*dpr, h*dpr);
-  uniforms.uAspect.value = w/h;
+  uniforms.uResolution.value.set(Math.max(1,w*dpr), Math.max(1,h*dpr));
+  uniforms.uAspect.value = w/Math.max(h,1);
   uniforms.uTanFov.value = Math.tan(THREE.MathUtils.degToRad(camera.fov*0.5));
-  bloomPass.setSize(w*dpr, h*dpr);
+  bloomPass.setSize(Math.max(1,w*dpr), Math.max(1,h*dpr));
 }
 window.addEventListener('resize', resize);
 
@@ -644,7 +786,8 @@ window.addEventListener('resize', resize);
 // ------------------------------------------------------------------------
 function syncFill(input){
   const min=parseFloat(input.min), max=parseFloat(input.max), v=parseFloat(input.value);
-  input.style.setProperty('--fill', ((v-min)/(max-min)*100)+'%');
+  const span = (max-min) || 1;
+  input.style.setProperty('--fill', (((v-min)/span)*100)+'%');
 }
 function fmt(id, v){
   if(id==='temp') return Math.round(v)+'K';
@@ -753,7 +896,7 @@ function adapt(dt){
     resize(); slowStreak=0;
   } else if(fastStreak > 90 && resScale < 1.0){
     resScale = Math.min(1.0, resScale+0.06);
-    uniforms.uSteps.value = Math.min(220, uniforms.uSteps.value+15);
+    uniforms.uSteps.value = Math.min(240, uniforms.uSteps.value+15);
     resize(); fastStreak=0;
   }
 }
@@ -764,7 +907,8 @@ function adapt(dt){
 let started=false;
 function frame(now){
   requestAnimationFrame(frame);
-  const dt = now - lastT; lastT = now;
+  let dt = now - lastT; lastT = now;
+  if(!(dt > 0) || dt > 1000) dt = 16.7; // guard pauses / tab restore
 
   uniforms.uTime.value = now*0.001;
   controls.update();
