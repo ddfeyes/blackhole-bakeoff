@@ -1,0 +1,1810 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Jelly Foundry Physics Playground</title>
+  <style>
+    :root {
+      --panel: rgba(17, 23, 34, 0.72);
+      --line: rgba(255, 255, 255, 0.16);
+      --text: #eef5ff;
+      --muted: #9fb0c6;
+      --hot: #76f0d1;
+      --hot2: #ffca6e;
+    }
+
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    html,
+    body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+      background: #10141d;
+      color: var(--text);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    canvas {
+      position: fixed;
+      inset: 0;
+      display: block;
+      cursor: grab;
+    }
+
+    canvas.dragging {
+      cursor: grabbing;
+    }
+
+    .panel {
+      position: fixed;
+      top: 18px;
+      left: 18px;
+      width: min(500px, calc(100vw - 36px));
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background:
+        linear-gradient(135deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.03)),
+        var(--panel);
+      box-shadow: 0 24px 70px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+      backdrop-filter: blur(22px) saturate(145%);
+      user-select: none;
+    }
+
+    .topline {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .brand {
+      display: grid;
+      gap: 1px;
+    }
+
+    .brand strong {
+      font-size: 14px;
+      line-height: 1.1;
+      letter-spacing: 0;
+      font-weight: 750;
+    }
+
+    .brand span {
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.2;
+    }
+
+    .readout {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      color: #d9e8ff;
+      font-size: 12px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .chip {
+      min-width: 66px;
+      padding: 7px 9px;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 999px;
+      background: rgba(8, 12, 20, 0.45);
+      text-align: center;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    }
+
+    .slider-row {
+      display: grid;
+      grid-template-columns: 58px 1fr 48px;
+      gap: 10px;
+      align-items: center;
+      margin-bottom: 12px;
+      color: #d8e5f7;
+      font-size: 12px;
+    }
+
+    input[type="range"] {
+      width: 100%;
+      height: 26px;
+      margin: 0;
+      appearance: none;
+      background: transparent;
+      cursor: pointer;
+    }
+
+    input[type="range"]::-webkit-slider-runnable-track {
+      height: 8px;
+      border-radius: 999px;
+      background: linear-gradient(90deg, #68e1ff, #76f0d1 50%, #ffca6e);
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.22), 0 6px 18px rgba(0, 0, 0, 0.22);
+    }
+
+    input[type="range"]::-moz-range-track {
+      height: 8px;
+      border-radius: 999px;
+      background: linear-gradient(90deg, #68e1ff, #76f0d1 50%, #ffca6e);
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.22), 0 6px 18px rgba(0, 0, 0, 0.22);
+    }
+
+    input[type="range"]::-webkit-slider-thumb {
+      width: 22px;
+      height: 22px;
+      margin-top: -7px;
+      appearance: none;
+      border: 0;
+      border-radius: 50%;
+      background: radial-gradient(circle at 34% 28%, #ffffff 0 12%, #d6fff5 32%, #37d8b3 64%, #168f81 100%);
+      box-shadow: 0 0 0 5px rgba(118, 240, 209, 0.14), 0 9px 20px rgba(0, 0, 0, 0.36);
+    }
+
+    input[type="range"]::-moz-range-thumb {
+      width: 22px;
+      height: 22px;
+      border: 0;
+      border-radius: 50%;
+      background: radial-gradient(circle at 34% 28%, #ffffff 0 12%, #d6fff5 32%, #37d8b3 64%, #168f81 100%);
+      box-shadow: 0 0 0 5px rgba(118, 240, 209, 0.14), 0 9px 20px rgba(0, 0, 0, 0.36);
+    }
+
+    .buttons {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 8px;
+    }
+
+    button {
+      min-height: 36px;
+      padding: 0 10px;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 12px;
+      color: #eff8ff;
+      background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.04)),
+        rgba(255, 255, 255, 0.07);
+      box-shadow: 0 10px 24px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.16);
+      font: inherit;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0;
+      white-space: nowrap;
+      cursor: pointer;
+      transition: transform 120ms ease, border-color 120ms ease, background 120ms ease;
+    }
+
+    button:hover {
+      transform: translateY(-1px);
+      border-color: rgba(118, 240, 209, 0.5);
+      background:
+        linear-gradient(180deg, rgba(118, 240, 209, 0.2), rgba(255, 255, 255, 0.04)),
+        rgba(255, 255, 255, 0.08);
+    }
+
+    button:active {
+      transform: translateY(1px);
+    }
+
+    .hint {
+      position: fixed;
+      right: 22px;
+      bottom: 18px;
+      max-width: min(430px, calc(100vw - 44px));
+      padding: 10px 13px;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 999px;
+      color: rgba(238, 245, 255, 0.8);
+      background: rgba(13, 18, 29, 0.45);
+      box-shadow: 0 16px 50px rgba(0, 0, 0, 0.25);
+      backdrop-filter: blur(16px);
+      font-size: 12px;
+      user-select: none;
+    }
+
+    @media (max-width: 720px) {
+      .panel {
+        top: 10px;
+        left: 10px;
+        width: calc(100vw - 20px);
+        padding: 12px;
+        border-radius: 16px;
+      }
+
+      .buttons {
+        grid-template-columns: repeat(2, 1fr);
+      }
+
+      .hint {
+        display: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <canvas id="world" aria-label="Interactive physics playground"></canvas>
+  <section class="panel" aria-label="Physics controls">
+    <div class="topline">
+      <div class="brand">
+        <strong>Jelly Foundry</strong>
+        <span>hand-written 2D physics</span>
+      </div>
+      <div class="readout">
+        <span class="chip" id="fps">60 fps</span>
+        <span class="chip" id="count">0 bodies</span>
+      </div>
+    </div>
+    <label class="slider-row">
+      <span>Gravity</span>
+      <input id="gravity" type="range" min="0" max="1800" value="980" step="20" />
+      <span id="gval">980</span>
+    </label>
+    <div class="buttons">
+      <button id="addJelly" type="button">Add jelly</button>
+      <button id="dropRagdoll" type="button">Drop ragdoll</button>
+      <button id="rebuildWall" type="button">Rebuild wall</button>
+      <button id="reset" type="button">Reset</button>
+    </div>
+  </section>
+  <div class="hint">Drag any jelly, limb, head, or brick. Release to throw.</div>
+
+  <script>
+    (() => {
+      "use strict";
+
+      const canvas = document.getElementById("world");
+      const ctx = canvas.getContext("2d", { alpha: false });
+      const fpsEl = document.getElementById("fps");
+      const countEl = document.getElementById("count");
+      const gravityEl = document.getElementById("gravity");
+      const gvalEl = document.getElementById("gval");
+
+      const FIXED_DT = 1 / 60;
+      const SUB_STEPS = 3;
+      const ITERATIONS = 5;
+      const MAX_SPEED = 2300;
+      const MAX_PARTICLES = 130;
+      const TAU = Math.PI * 2;
+
+      let W = 1;
+      let H = 1;
+      let DPR = 1;
+      let bounds = { left: 34, right: 900, top: 62, floor: 640 };
+      let gravity = Number(gravityEl.value);
+      let accumulator = 0;
+      let lastTime = performance.now();
+      let fps = 60;
+      let shake = 0;
+      let particleId = 1;
+      let bodyId = 1;
+
+      const particles = [];
+      const constraints = [];
+      const angleConstraints = [];
+      const blobs = [];
+      const ragdolls = [];
+      const bricks = [];
+      const dust = [];
+      const sparks = [];
+      const grabs = {
+        active: false,
+        type: "",
+        targetX: 0,
+        targetY: 0,
+        pointerId: null,
+        particle: null,
+        rigid: null,
+        localX: 0,
+        localY: 0,
+        entity: null,
+        history: []
+      };
+
+      const jellyPalette = [
+        { a: "#62f3d0", b: "#179bbd", c: "rgba(125, 255, 221, 0.95)" },
+        { a: "#ffadca", b: "#bb4ef0", c: "rgba(255, 178, 216, 0.95)" },
+        { a: "#ffd36e", b: "#f06466", c: "rgba(255, 218, 132, 0.95)" },
+        { a: "#9ef587", b: "#37a05d", c: "rgba(210, 255, 158, 0.95)" },
+        { a: "#8ec8ff", b: "#4166d9", c: "rgba(179, 219, 255, 0.95)" }
+      ];
+
+      const rand = (min, max) => min + Math.random() * (max - min);
+      const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
+      const hypot = Math.hypot;
+      const dot = (ax, ay, bx, by) => ax * bx + ay * by;
+      const cross = (ax, ay, bx, by) => ax * by - ay * bx;
+      const mix = (a, b, t) => a + (b - a) * t;
+
+      function resize() {
+        DPR = Math.min(2, window.devicePixelRatio || 1);
+        W = window.innerWidth;
+        H = window.innerHeight;
+        canvas.width = Math.max(1, Math.floor(W * DPR));
+        canvas.height = Math.max(1, Math.floor(H * DPR));
+        canvas.style.width = W + "px";
+        canvas.style.height = H + "px";
+        ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+        bounds = {
+          left: Math.max(24, W * 0.026),
+          right: W - Math.max(24, W * 0.026),
+          top: 56,
+          floor: H - Math.max(42, H * 0.075)
+        };
+      }
+
+      class Particle {
+        constructor(x, y, r, mass, group, material) {
+          this.id = particleId++;
+          this.x = x;
+          this.y = y;
+          this.px = x;
+          this.py = y;
+          this.r = r;
+          this.mass = mass;
+          this.invMass = mass > 0 ? 1 / mass : 0;
+          this.group = group;
+          this.material = material || "soft";
+          this.entity = null;
+          this.outer = false;
+          this.grabbable = true;
+        }
+
+        velocity(dt) {
+          return {
+            x: clamp((this.x - this.px) / dt, -MAX_SPEED, MAX_SPEED),
+            y: clamp((this.y - this.py) / dt, -MAX_SPEED, MAX_SPEED)
+          };
+        }
+
+        setVelocity(vx, vy, dt) {
+          vx = clamp(vx, -MAX_SPEED, MAX_SPEED);
+          vy = clamp(vy, -MAX_SPEED, MAX_SPEED);
+          this.px = this.x - vx * dt;
+          this.py = this.y - vy * dt;
+        }
+
+        addVelocity(vx, vy, dt) {
+          const v = this.velocity(dt);
+          this.setVelocity(v.x + vx, v.y + vy, dt);
+        }
+      }
+
+      class DistanceConstraint {
+        constructor(a, b, rest, stiffness) {
+          this.a = a;
+          this.b = b;
+          this.rest = rest;
+          this.stiffness = stiffness;
+        }
+
+        solve() {
+          const a = this.a;
+          const b = this.b;
+          const dx = b.x - a.x;
+          const dy = b.y - a.y;
+          const d = hypot(dx, dy) || 0.0001;
+          const w = a.invMass + b.invMass;
+          if (!w) return;
+          const c = (d - this.rest) / d;
+          const sx = dx * c * this.stiffness;
+          const sy = dy * c * this.stiffness;
+          const aw = a.invMass / w;
+          const bw = b.invMass / w;
+          a.x += sx * aw;
+          a.y += sy * aw;
+          b.x -= sx * bw;
+          b.y -= sy * bw;
+        }
+      }
+
+      class AngleLimit {
+        constructor(a, b, c, min, max, stiffness) {
+          this.a = a;
+          this.b = b;
+          this.c = c;
+          this.min = min;
+          this.max = max;
+          this.stiffness = stiffness;
+        }
+
+        solve() {
+          const a = this.a;
+          const b = this.b;
+          const c = this.c;
+          let ax = a.x - b.x;
+          let ay = a.y - b.y;
+          let cx = c.x - b.x;
+          let cy = c.y - b.y;
+          const al = hypot(ax, ay);
+          const cl = hypot(cx, cy);
+          if (al < 0.001 || cl < 0.001) return;
+          const signed = Math.atan2(cross(ax, ay, cx, cy), dot(ax, ay, cx, cy));
+          const side = signed >= 0 ? 1 : -1;
+          const abs = Math.abs(signed);
+          let delta = 0;
+          if (abs > this.max) delta = abs - this.max;
+          else if (abs < this.min) delta = abs - this.min;
+          if (Math.abs(delta) < 0.0001) return;
+          const rotA = side * delta * 0.5 * this.stiffness;
+          const rotC = -side * delta * 0.5 * this.stiffness;
+          const ca = Math.cos(rotA);
+          const sa = Math.sin(rotA);
+          const cc = Math.cos(rotC);
+          const sc = Math.sin(rotC);
+          const wa = a.invMass / (a.invMass + c.invMass || 1);
+          const wc = c.invMass / (a.invMass + c.invMass || 1);
+          const nax = ax * ca - ay * sa;
+          const nay = ax * sa + ay * ca;
+          const ncx = cx * cc - cy * sc;
+          const ncy = cx * sc + cy * cc;
+          a.x += (b.x + nax - a.x) * wa;
+          a.y += (b.y + nay - a.y) * wa;
+          c.x += (b.x + ncx - c.x) * wc;
+          c.y += (b.y + ncy - c.y) * wc;
+        }
+      }
+
+      class RigidBody {
+        constructor(x, y, w, h, mass, color, row) {
+          this.id = bodyId++;
+          this.x = x;
+          this.y = y;
+          this.w = w;
+          this.h = h;
+          this.hw = w * 0.5;
+          this.hh = h * 0.5;
+          this.radius = Math.hypot(this.hw, this.hh);
+          this.vx = 0;
+          this.vy = 0;
+          this.angle = 0;
+          this.av = 0;
+          this.mass = mass;
+          this.invMass = mass > 0 ? 1 / mass : 0;
+          this.inertia = mass * (w * w + h * h) / 12;
+          this.invI = this.inertia > 0 ? 1 / this.inertia : 0;
+          this.color = color;
+          this.row = row || 0;
+          this.sleepy = 0;
+          this.grabbable = true;
+        }
+
+        axes() {
+          const c = Math.cos(this.angle);
+          const s = Math.sin(this.angle);
+          return [{ x: c, y: s }, { x: -s, y: c }];
+        }
+
+        worldPoint(lx, ly) {
+          const c = Math.cos(this.angle);
+          const s = Math.sin(this.angle);
+          return { x: this.x + lx * c - ly * s, y: this.y + lx * s + ly * c };
+        }
+
+        localPoint(x, y) {
+          const c = Math.cos(this.angle);
+          const s = Math.sin(this.angle);
+          const dx = x - this.x;
+          const dy = y - this.y;
+          return { x: dx * c + dy * s, y: -dx * s + dy * c };
+        }
+
+        corners() {
+          return [
+            this.worldPoint(-this.hw, -this.hh),
+            this.worldPoint(this.hw, -this.hh),
+            this.worldPoint(this.hw, this.hh),
+            this.worldPoint(-this.hw, this.hh)
+          ];
+        }
+
+        containsPoint(x, y) {
+          const p = this.localPoint(x, y);
+          return Math.abs(p.x) <= this.hw && Math.abs(p.y) <= this.hh;
+        }
+
+        pointVelocity(px, py) {
+          const rx = px - this.x;
+          const ry = py - this.y;
+          return { x: this.vx - this.av * ry, y: this.vy + this.av * rx };
+        }
+
+        applyImpulse(ix, iy, px, py) {
+          if (!this.invMass) return;
+          this.vx += ix * this.invMass;
+          this.vy += iy * this.invMass;
+          const rx = px - this.x;
+          const ry = py - this.y;
+          this.av += cross(rx, ry, ix, iy) * this.invI;
+          this.wake();
+        }
+
+        wake() {
+          this.sleepy = 0;
+        }
+      }
+
+      function moveParticle(p, dx, dy, keepVelocity) {
+        p.x += dx;
+        p.y += dy;
+        if (keepVelocity) {
+          p.px += dx;
+          p.py += dy;
+        }
+      }
+
+      function createParticle(x, y, r, mass, group, material) {
+        const p = new Particle(x, y, r, mass, group, material);
+        particles.push(p);
+        return p;
+      }
+
+      function createBlob(x, y, radius, palette) {
+        if (particles.length > MAX_PARTICLES) return null;
+        const group = "blob-" + bodyId++;
+        const count = 16;
+        const blob = {
+          id: group,
+          type: "blob",
+          cx: x,
+          cy: y,
+          radius,
+          particles: [],
+          outer: [],
+          center: null,
+          color: palette || jellyPalette[blobs.length % jellyPalette.length],
+          targetArea: 0
+        };
+        const center = createParticle(x, y, radius * 0.18, 2.4, group, "jelly");
+        center.entity = blob;
+        center.outer = false;
+        blob.center = center;
+        blob.particles.push(center);
+        for (let i = 0; i < count; i++) {
+          const a = i / count * TAU;
+          const wobble = 1 + rand(-0.025, 0.025);
+          const p = createParticle(x + Math.cos(a) * radius * wobble, y + Math.sin(a) * radius * wobble, radius * 0.135, 0.72, group, "jelly");
+          p.outer = true;
+          p.entity = blob;
+          blob.outer.push(p);
+          blob.particles.push(p);
+        }
+        for (let i = 0; i < count; i++) {
+          const a = blob.outer[i];
+          const b = blob.outer[(i + 1) % count];
+          const c = blob.outer[(i + 2) % count];
+          constraints.push(new DistanceConstraint(a, b, distance(a, b), 0.86));
+          constraints.push(new DistanceConstraint(a, c, distance(a, c), 0.34));
+          constraints.push(new DistanceConstraint(center, a, radius, 0.42));
+        }
+        blob.targetArea = polygonArea(blob.outer);
+        blobs.push(blob);
+        return blob;
+      }
+
+      function createRagdoll(x, y) {
+        const group = "ragdoll-" + bodyId++;
+        const rag = { id: group, type: "ragdoll", particles: [], color: "#4b6387" };
+        const p = (name, px, py, r, m) => {
+          const part = createParticle(px, py, r, m, group, name === "head" ? "head" : "ragdoll");
+          part.name = name;
+          part.entity = rag;
+          rag[name] = part;
+          rag.particles.push(part);
+          return part;
+        };
+        p("head", x, y - 38, 22, 2.6);
+        p("neck", x, y - 7, 10, 1.2);
+        p("pelvis", x, y + 76, 12, 2.0);
+        p("ls", x - 28, y + 1, 10, 1.1);
+        p("rs", x + 28, y + 1, 10, 1.1);
+        p("lh", x - 18, y + 80, 10, 1.2);
+        p("rh", x + 18, y + 80, 10, 1.2);
+        p("le", x - 54, y + 48, 9, 0.88);
+        p("re", x + 54, y + 48, 9, 0.88);
+        p("lw", x - 70, y + 91, 10, 0.78);
+        p("rw", x + 70, y + 91, 10, 0.78);
+        p("lk", x - 27, y + 139, 10, 1.05);
+        p("rk", x + 27, y + 139, 10, 1.05);
+        p("la", x - 29, y + 197, 12, 0.96);
+        p("ra", x + 29, y + 197, 12, 0.96);
+
+        const link = (a, b, stiffness) => constraints.push(new DistanceConstraint(rag[a], rag[b], distance(rag[a], rag[b]), stiffness));
+        link("head", "neck", 0.9);
+        link("neck", "pelvis", 0.62);
+        link("ls", "rs", 0.95);
+        link("lh", "rh", 0.95);
+        link("ls", "lh", 0.93);
+        link("rs", "rh", 0.93);
+        link("ls", "rh", 0.48);
+        link("rs", "lh", 0.48);
+        link("neck", "ls", 0.9);
+        link("neck", "rs", 0.9);
+        link("pelvis", "lh", 0.9);
+        link("pelvis", "rh", 0.9);
+        link("ls", "le", 0.96);
+        link("le", "lw", 0.96);
+        link("rs", "re", 0.96);
+        link("re", "rw", 0.96);
+        link("lh", "lk", 0.97);
+        link("lk", "la", 0.97);
+        link("rh", "rk", 0.97);
+        link("rk", "ra", 0.97);
+
+        const angle = (a, b, c, min, max, stiffness) => angleConstraints.push(new AngleLimit(rag[a], rag[b], rag[c], min, max, stiffness));
+        angle("neck", "ls", "le", 0.35, 2.75, 0.46);
+        angle("ls", "le", "lw", 0.32, 2.95, 0.55);
+        angle("neck", "rs", "re", 0.35, 2.75, 0.46);
+        angle("rs", "re", "rw", 0.32, 2.95, 0.55);
+        angle("pelvis", "lh", "lk", 0.32, 2.65, 0.5);
+        angle("lh", "lk", "la", 0.26, 2.95, 0.58);
+        angle("pelvis", "rh", "rk", 0.32, 2.65, 0.5);
+        angle("rh", "rk", "ra", 0.26, 2.95, 0.58);
+        angle("head", "neck", "pelvis", 2.35, 3.12, 0.38);
+
+        ragdolls.push(rag);
+        return rag;
+      }
+
+      function createWall() {
+        bricks.length = 0;
+        const cols = W < 760 ? 4 : 5;
+        const rows = W < 760 ? 6 : 7;
+        const bw = clamp(W * 0.075, 56, 78);
+        const bh = clamp(H * 0.04, 24, 32);
+        const gap = 1.2;
+        const startX = clamp(W * 0.68, bounds.left + bw * cols * 0.52, bounds.right - bw * cols * 0.48);
+        const baseY = bounds.floor - bh * 0.5 - 0.4;
+        for (let r = 0; r < rows; r++) {
+          const offset = r % 2 ? bw * 0.5 : 0;
+          const rowCount = r % 2 ? cols - 1 : cols;
+          for (let c = 0; c < rowCount; c++) {
+            const x = startX + (c - (rowCount - 1) / 2) * (bw + gap) + (r % 2 ? 0 : 0);
+            const y = baseY - r * (bh + gap);
+            const brick = new RigidBody(x + offset * 0.02, y, bw, bh, 7.4, r % 3 === 0 ? "#bb6b50" : r % 3 === 1 ? "#a95b48" : "#cf7f58", r);
+            brick.angle = rand(-0.006, 0.006);
+            bricks.push(brick);
+          }
+        }
+      }
+
+      function clearWorld() {
+        particles.length = 0;
+        constraints.length = 0;
+        angleConstraints.length = 0;
+        blobs.length = 0;
+        ragdolls.length = 0;
+        bricks.length = 0;
+        dust.length = 0;
+        sparks.length = 0;
+        grabs.active = false;
+      }
+
+      function seedWorld() {
+        clearWorld();
+        createBlob(bounds.left + W * 0.16, bounds.floor - 245, 52, jellyPalette[0]);
+        createBlob(bounds.left + W * 0.29, bounds.floor - 188, 45, jellyPalette[1]);
+        createBlob(bounds.left + W * 0.21, bounds.floor - 105, 39, jellyPalette[2]);
+        createRagdoll(clamp(W * 0.45, bounds.left + 220, bounds.right - 260), bounds.floor - 340);
+        createWall();
+      }
+
+      function distance(a, b) {
+        return hypot(a.x - b.x, a.y - b.y);
+      }
+
+      function polygonArea(points) {
+        let a = 0;
+        for (let i = 0; i < points.length; i++) {
+          const p = points[i];
+          const q = points[(i + 1) % points.length];
+          a += p.x * q.y - q.x * p.y;
+        }
+        return Math.abs(a * 0.5);
+      }
+
+      function blobCenter(blob) {
+        let x = 0;
+        let y = 0;
+        for (const p of blob.outer) {
+          x += p.x;
+          y += p.y;
+        }
+        const inv = 1 / blob.outer.length;
+        return { x: x * inv, y: y * inv };
+      }
+
+      function solveBlobArea(blob) {
+        const center = blobCenter(blob);
+        blob.cx = mix(blob.cx || center.x, center.x, 0.35);
+        blob.cy = mix(blob.cy || center.y, center.y, 0.35);
+        const area = polygonArea(blob.outer);
+        const diff = clamp((blob.targetArea - area) / Math.max(blob.targetArea, 1), -0.45, 0.45);
+        const pressure = diff * blob.radius * 0.105;
+        for (const p of blob.outer) {
+          let dx = p.x - center.x;
+          let dy = p.y - center.y;
+          const d = hypot(dx, dy) || 0.001;
+          dx /= d;
+          dy /= d;
+          p.x += dx * pressure;
+          p.y += dy * pressure;
+        }
+        blob.center.x += (center.x - blob.center.x) * 0.18;
+        blob.center.y += (center.y - blob.center.y) * 0.18;
+      }
+
+      function integrateParticles(dt) {
+        const damp = 0.996;
+        for (const p of particles) {
+          if (!p.invMass) continue;
+          let vx = (p.x - p.px) * damp;
+          let vy = (p.y - p.py) * damp + gravity * dt * dt;
+          const speed = hypot(vx / dt, vy / dt);
+          if (speed > MAX_SPEED) {
+            const s = MAX_SPEED / speed;
+            vx *= s;
+            vy *= s;
+          }
+          p.px = p.x;
+          p.py = p.y;
+          p.x += vx;
+          p.y += vy;
+        }
+      }
+
+      function integrateRigids(dt) {
+        for (const b of bricks) {
+          b.vy += gravity * dt;
+          b.vx *= 0.999;
+          b.vy *= 0.999;
+          b.av *= 0.997;
+          const speed = hypot(b.vx, b.vy);
+          if (speed > MAX_SPEED) {
+            const s = MAX_SPEED / speed;
+            b.vx *= s;
+            b.vy *= s;
+          }
+          b.av = clamp(b.av, -18, 18);
+          b.x += b.vx * dt;
+          b.y += b.vy * dt;
+          b.angle += b.av * dt;
+        }
+      }
+
+      function solveParticleBounds(p, dt) {
+        let hit = false;
+        const v = p.velocity(dt);
+        if (p.x - p.r < bounds.left) {
+          p.x = bounds.left + p.r;
+          p.setVelocity(Math.abs(v.x) * 0.18, v.y * 0.74, dt);
+          hit = true;
+        } else if (p.x + p.r > bounds.right) {
+          p.x = bounds.right - p.r;
+          p.setVelocity(-Math.abs(v.x) * 0.18, v.y * 0.74, dt);
+          hit = true;
+        }
+        if (p.y - p.r < bounds.top) {
+          p.y = bounds.top + p.r;
+          p.setVelocity(v.x * 0.82, Math.abs(v.y) * 0.12, dt);
+          hit = true;
+        } else if (p.y + p.r > bounds.floor) {
+          const impact = Math.max(0, v.y);
+          p.y = bounds.floor - p.r;
+          p.setVelocity(v.x * 0.76, impact > 160 ? -impact * 0.09 : 0, dt);
+          if (impact > 470 && Math.random() < 0.12) impactBurst(p.x, bounds.floor, 0, -1, impact, "#b4ad9d");
+          hit = true;
+        }
+        return hit;
+      }
+
+      function solveParticlePair(a, b, dt) {
+        if (a.group === b.group) return;
+        const dx = b.x - a.x;
+        const dy = b.y - a.y;
+        const min = a.r + b.r;
+        let d2 = dx * dx + dy * dy;
+        if (d2 >= min * min) return;
+        let d = Math.sqrt(d2);
+        let nx;
+        let ny;
+        if (d < 0.001) {
+          nx = 1;
+          ny = 0;
+          d = 0.001;
+        } else {
+          nx = dx / d;
+          ny = dy / d;
+        }
+        const w = a.invMass + b.invMass;
+        if (!w) return;
+        const pen = (min - d) * 0.82;
+        const ax = -nx * pen * a.invMass / w;
+        const ay = -ny * pen * a.invMass / w;
+        const bx = nx * pen * b.invMass / w;
+        const by = ny * pen * b.invMass / w;
+        moveParticle(a, ax, ay, true);
+        moveParticle(b, bx, by, true);
+
+        const va = a.velocity(dt);
+        const vb = b.velocity(dt);
+        const rvx = vb.x - va.x;
+        const rvy = vb.y - va.y;
+        const rel = dot(rvx, rvy, nx, ny);
+        if (rel < -18) {
+          const j = Math.min(700, -(1.08) * rel / w);
+          a.addVelocity(-nx * j * a.invMass, -ny * j * a.invMass, dt);
+          b.addVelocity(nx * j * b.invMass, ny * j * b.invMass, dt);
+          const tx = -ny;
+          const ty = nx;
+          const vt = dot(rvx, rvy, tx, ty);
+          const fj = clamp(-vt / w, -j * 0.45, j * 0.45);
+          a.addVelocity(-tx * fj * a.invMass, -ty * fj * a.invMass, dt);
+          b.addVelocity(tx * fj * b.invMass, ty * fj * b.invMass, dt);
+          if (Math.abs(rel) > 520 && Math.random() < 0.08) impactBurst((a.x + b.x) * 0.5, (a.y + b.y) * 0.5, -nx, -ny, Math.abs(rel), "#d7ecff");
+        }
+      }
+
+      function solveBlobBlob(a, b) {
+        const ac = blobCenter(a);
+        const bc = blobCenter(b);
+        const dx = bc.x - ac.x;
+        const dy = bc.y - ac.y;
+        const min = (a.radius + b.radius) * 0.92;
+        let d = hypot(dx, dy);
+        if (d >= min) return;
+        if (d < 0.001) d = 0.001;
+        const nx = dx / d;
+        const ny = dy / d;
+        const pen = (min - d) * 0.055;
+        for (const p of a.particles) moveParticle(p, -nx * pen, -ny * pen, true);
+        for (const p of b.particles) moveParticle(p, nx * pen, ny * pen, true);
+      }
+
+      function closestPointOnBody(body, x, y) {
+        const c = Math.cos(body.angle);
+        const s = Math.sin(body.angle);
+        const dx = x - body.x;
+        const dy = y - body.y;
+        const lx = dx * c + dy * s;
+        const ly = -dx * s + dy * c;
+        const clx = clamp(lx, -body.hw, body.hw);
+        const cly = clamp(ly, -body.hh, body.hh);
+        const inside = Math.abs(lx) <= body.hw && Math.abs(ly) <= body.hh;
+        if (inside) {
+          const left = body.hw + lx;
+          const right = body.hw - lx;
+          const top = body.hh + ly;
+          const bottom = body.hh - ly;
+          const m = Math.min(left, right, top, bottom);
+          let nlx = 0;
+          let nly = 0;
+          let flx = lx;
+          let fly = ly;
+          if (m === left) {
+            nlx = -1;
+            flx = -body.hw;
+          } else if (m === right) {
+            nlx = 1;
+            flx = body.hw;
+          } else if (m === top) {
+            nly = -1;
+            fly = -body.hh;
+          } else {
+            nly = 1;
+            fly = body.hh;
+          }
+          return {
+            x: body.x + flx * c - fly * s,
+            y: body.y + flx * s + fly * c,
+            nx: nlx * c - nly * s,
+            ny: nlx * s + nly * c,
+            inside,
+            depth: m
+          };
+        }
+        return {
+          x: body.x + clx * c - cly * s,
+          y: body.y + clx * s + cly * c,
+          nx: 0,
+          ny: 0,
+          inside,
+          depth: 0
+        };
+      }
+
+      function solveParticleRigid(p, b, dt) {
+        const broad = b.radius + p.r + 4;
+        const bdx = p.x - b.x;
+        const bdy = p.y - b.y;
+        if (bdx * bdx + bdy * bdy > broad * broad) return;
+        const cp = closestPointOnBody(b, p.x, p.y);
+        let nx = p.x - cp.x;
+        let ny = p.y - cp.y;
+        let dist = hypot(nx, ny);
+        let pen;
+        if (cp.inside) {
+          nx = cp.nx;
+          ny = cp.ny;
+          dist = 1;
+          pen = p.r + cp.depth;
+        } else {
+          if (dist >= p.r) return;
+          if (dist < 0.001) {
+            nx = 0;
+            ny = -1;
+            dist = 1;
+          } else {
+            nx /= dist;
+            ny /= dist;
+          }
+          pen = p.r - dist;
+        }
+        const rx = cp.x - b.x;
+        const ry = cp.y - b.y;
+        const angular = Math.pow(cross(rx, ry, nx, ny), 2) * b.invI;
+        const total = p.invMass + b.invMass + angular;
+        if (!total) return;
+        const move = Math.max(0, pen - 0.02) / total * 0.72;
+        moveParticle(p, nx * move * p.invMass, ny * move * p.invMass, true);
+        b.x -= nx * move * b.invMass;
+        b.y -= ny * move * b.invMass;
+        b.angle -= cross(rx, ry, nx * move, ny * move) * b.invI * 0.05;
+
+        const pv = p.velocity(dt);
+        const bv = b.pointVelocity(cp.x, cp.y);
+        const rvx = pv.x - bv.x;
+        const rvy = pv.y - bv.y;
+        const vn = dot(rvx, rvy, nx, ny);
+        if (vn < -8) {
+          const e = p.material === "jelly" ? 0.13 : 0.05;
+          const j = Math.min(1200, -(1 + e) * vn / total);
+          p.addVelocity(nx * j * p.invMass, ny * j * p.invMass, dt);
+          b.applyImpulse(-nx * j, -ny * j, cp.x, cp.y);
+          const tx = -ny;
+          const ty = nx;
+          const vt = dot(rvx, rvy, tx, ty);
+          const fj = clamp(-vt / total, -j * 0.68, j * 0.68);
+          p.addVelocity(tx * fj * p.invMass, ty * fj * p.invMass, dt);
+          b.applyImpulse(-tx * fj, -ty * fj, cp.x, cp.y);
+          if (Math.abs(vn) > 560 && Math.random() < 0.12) impactBurst(cp.x, cp.y, nx, ny, Math.abs(vn), p.material === "jelly" ? "#c6fff1" : "#c5b8aa");
+        }
+      }
+
+      function projectCorners(corners, ax, ay) {
+        let min = Infinity;
+        let max = -Infinity;
+        for (const p of corners) {
+          const v = dot(p.x, p.y, ax, ay);
+          if (v < min) min = v;
+          if (v > max) max = v;
+        }
+        return { min, max };
+      }
+
+      function satBody(a, b) {
+        const ac = a.corners();
+        const bc = b.corners();
+        const axes = [...a.axes(), ...b.axes()];
+        let bestOverlap = Infinity;
+        let bestAxis = null;
+        for (const axis of axes) {
+          const pa = projectCorners(ac, axis.x, axis.y);
+          const pb = projectCorners(bc, axis.x, axis.y);
+          const overlap = Math.min(pa.max, pb.max) - Math.max(pa.min, pb.min);
+          if (overlap <= 0) return null;
+          if (overlap < bestOverlap) {
+            bestOverlap = overlap;
+            bestAxis = axis;
+          }
+        }
+        let nx = bestAxis.x;
+        let ny = bestAxis.y;
+        if (dot(b.x - a.x, b.y - a.y, nx, ny) < 0) {
+          nx = -nx;
+          ny = -ny;
+        }
+        return { nx, ny, penetration: bestOverlap };
+      }
+
+      function supportPoint(body, nx, ny) {
+        const corners = body.corners();
+        let best = corners[0];
+        let bestV = dot(best.x, best.y, nx, ny);
+        for (let i = 1; i < corners.length; i++) {
+          const v = dot(corners[i].x, corners[i].y, nx, ny);
+          if (v > bestV) {
+            bestV = v;
+            best = corners[i];
+          }
+        }
+        return best;
+      }
+
+      function solveRigidRigid(a, b) {
+        const dx = b.x - a.x;
+        const dy = b.y - a.y;
+        const broad = a.radius + b.radius + 3;
+        if (dx * dx + dy * dy > broad * broad) return;
+        const hit = satBody(a, b);
+        if (!hit) return;
+        const nx = hit.nx;
+        const ny = hit.ny;
+        const pa = supportPoint(a, nx, ny);
+        const pb = supportPoint(b, -nx, -ny);
+        const cx = (pa.x + pb.x) * 0.5;
+        const cy = (pa.y + pb.y) * 0.5;
+        const raX = cx - a.x;
+        const raY = cy - a.y;
+        const rbX = cx - b.x;
+        const rbY = cy - b.y;
+        const total = a.invMass + b.invMass +
+          Math.pow(cross(raX, raY, nx, ny), 2) * a.invI +
+          Math.pow(cross(rbX, rbY, nx, ny), 2) * b.invI;
+        if (!total) return;
+
+        const correction = Math.max(0, hit.penetration - 0.35) / total * 0.58;
+        a.x -= nx * correction * a.invMass;
+        a.y -= ny * correction * a.invMass;
+        b.x += nx * correction * b.invMass;
+        b.y += ny * correction * b.invMass;
+
+        const va = a.pointVelocity(cx, cy);
+        const vb = b.pointVelocity(cx, cy);
+        const rvx = vb.x - va.x;
+        const rvy = vb.y - va.y;
+        const vn = dot(rvx, rvy, nx, ny);
+        if (vn < 0) {
+          const j = Math.min(1500, -(1.05) * vn / total);
+          a.applyImpulse(-nx * j, -ny * j, cx, cy);
+          b.applyImpulse(nx * j, ny * j, cx, cy);
+          const tx = -ny;
+          const ty = nx;
+          const vt = dot(rvx, rvy, tx, ty);
+          const fj = clamp(-vt / total, -j * 0.74, j * 0.74);
+          a.applyImpulse(-tx * fj, -ty * fj, cx, cy);
+          b.applyImpulse(tx * fj, ty * fj, cx, cy);
+          if (Math.abs(vn) > 620 && Math.random() < 0.07) impactBurst(cx, cy, -nx, -ny, Math.abs(vn), "#b98f75");
+        }
+      }
+
+      function solveRigidBounds(b) {
+        const corners = b.corners();
+        for (const c of corners) {
+          if (c.y > bounds.floor) applyBoundaryImpulse(b, c.x, c.y, 0, -1, c.y - bounds.floor);
+          if (c.x < bounds.left) applyBoundaryImpulse(b, c.x, c.y, 1, 0, bounds.left - c.x);
+          if (c.x > bounds.right) applyBoundaryImpulse(b, c.x, c.y, -1, 0, c.x - bounds.right);
+          if (c.y < bounds.top) applyBoundaryImpulse(b, c.x, c.y, 0, 1, bounds.top - c.y);
+        }
+        const speed = hypot(b.vx, b.vy);
+        if (speed < 3 && Math.abs(b.av) < 0.05 && Math.abs(b.y - (bounds.floor - b.hh)) < 3) {
+          b.sleepy++;
+          if (b.sleepy > 28) {
+            b.vx *= 0.72;
+            b.vy *= 0.42;
+            b.av *= 0.6;
+            if (speed < 0.8) {
+              b.vx = 0;
+              b.vy = 0;
+            }
+          }
+        } else {
+          b.sleepy = 0;
+        }
+      }
+
+      function applyBoundaryImpulse(b, cx, cy, nx, ny, pen) {
+        const rx = cx - b.x;
+        const ry = cy - b.y;
+        const total = b.invMass + Math.pow(cross(rx, ry, nx, ny), 2) * b.invI;
+        if (!total) return;
+        const corr = Math.max(0, pen - 0.02) / total * 0.62;
+        b.x += nx * corr * b.invMass;
+        b.y += ny * corr * b.invMass;
+        const v = b.pointVelocity(cx, cy);
+        const vn = dot(v.x, v.y, nx, ny);
+        if (vn < 0) {
+          const j = Math.min(1700, -(1.03) * vn / total);
+          b.applyImpulse(nx * j, ny * j, cx, cy);
+          const tx = -ny;
+          const ty = nx;
+          const vt = dot(v.x, v.y, tx, ty);
+          const fj = clamp(-vt / total, -j * 0.82, j * 0.82);
+          b.applyImpulse(tx * fj, ty * fj, cx, cy);
+          if (-vn > 700 && Math.random() < 0.06) impactBurst(cx, cy, nx, ny, -vn, "#a98f7d");
+        }
+      }
+
+      function applyDrag(dt) {
+        if (!grabs.active) return;
+        if (grabs.type === "particle" && grabs.particle) {
+          const p = grabs.particle;
+          const dx = grabs.targetX - p.x;
+          const dy = grabs.targetY - p.y;
+          p.x += dx * 0.42;
+          p.y += dy * 0.42;
+          const v = releaseVelocity();
+          p.setVelocity(v.x, v.y, dt);
+        } else if (grabs.type === "rigid" && grabs.rigid) {
+          const b = grabs.rigid;
+          const wp = b.worldPoint(grabs.localX, grabs.localY);
+          const errX = grabs.targetX - wp.x;
+          const errY = grabs.targetY - wp.y;
+          const pv = b.pointVelocity(wp.x, wp.y);
+          const ix = clamp(errX * 42 - pv.x * 5.4, -1800, 1800) * dt * b.mass;
+          const iy = clamp(errY * 42 - pv.y * 5.4, -1800, 1800) * dt * b.mass;
+          b.applyImpulse(ix, iy, wp.x, wp.y);
+        }
+      }
+
+      function step(dt) {
+        const sdt = dt / SUB_STEPS;
+        for (let sub = 0; sub < SUB_STEPS; sub++) {
+          integrateParticles(sdt);
+          integrateRigids(sdt);
+          applyDrag(sdt);
+          for (let k = 0; k < ITERATIONS; k++) {
+            for (const c of constraints) c.solve();
+            for (const a of angleConstraints) a.solve();
+            for (const blob of blobs) solveBlobArea(blob);
+            for (let i = 0; i < blobs.length; i++) {
+              for (let j = i + 1; j < blobs.length; j++) solveBlobBlob(blobs[i], blobs[j]);
+            }
+            for (const p of particles) solveParticleBounds(p, sdt);
+            for (let i = 0; i < particles.length; i++) {
+              for (let j = i + 1; j < particles.length; j++) solveParticlePair(particles[i], particles[j], sdt);
+            }
+            for (const p of particles) {
+              for (const b of bricks) solveParticleRigid(p, b, sdt);
+            }
+            for (let i = 0; i < bricks.length; i++) {
+              solveRigidBounds(bricks[i]);
+              for (let j = i + 1; j < bricks.length; j++) solveRigidRigid(bricks[i], bricks[j]);
+            }
+            applyDrag(sdt);
+          }
+          for (const p of particles) {
+            const v = p.velocity(sdt);
+            if (hypot(v.x, v.y) > MAX_SPEED) {
+              const s = MAX_SPEED / hypot(v.x, v.y);
+              p.setVelocity(v.x * s, v.y * s, sdt);
+            }
+          }
+        }
+        updateDust(dt);
+      }
+
+      function updateDust(dt) {
+        for (let i = dust.length - 1; i >= 0; i--) {
+          const p = dust[i];
+          p.vy += 280 * dt;
+          p.vx *= 0.984;
+          p.vy *= 0.984;
+          p.x += p.vx * dt;
+          p.y += p.vy * dt;
+          p.life -= dt;
+          if (p.life <= 0) dust.splice(i, 1);
+        }
+        for (let i = sparks.length - 1; i >= 0; i--) {
+          const p = sparks[i];
+          p.vy += 160 * dt;
+          p.x += p.vx * dt;
+          p.y += p.vy * dt;
+          p.life -= dt;
+          if (p.life <= 0) sparks.splice(i, 1);
+        }
+        shake = Math.max(0, shake - dt * 14);
+      }
+
+      function impactBurst(x, y, nx, ny, strength, color) {
+        const amount = clamp(Math.floor(strength / 110), 4, 18);
+        for (let i = 0; i < amount; i++) {
+          const a = Math.atan2(ny, nx) + rand(-1.35, 1.35);
+          const sp = rand(40, clamp(strength * 0.42, 120, 520));
+          dust.push({
+            x: x + rand(-5, 5),
+            y: y + rand(-5, 5),
+            vx: Math.cos(a) * sp + rand(-45, 45),
+            vy: Math.sin(a) * sp + rand(-45, 45),
+            r: rand(1.6, 5.8),
+            life: rand(0.25, 0.82),
+            maxLife: 0.82,
+            color
+          });
+        }
+        while (dust.length > 170) dust.shift();
+        if (strength > 680) {
+          for (let i = 0; i < 6; i++) {
+            const a = rand(-Math.PI, Math.PI);
+            const sp = rand(90, 360);
+            sparks.push({ x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: rand(0.1, 0.28) });
+          }
+          while (sparks.length > 36) sparks.shift();
+          shake = clamp(shake + strength / 2400, 0, 7);
+        }
+      }
+
+      function render() {
+        const sx = shake ? rand(-shake, shake) : 0;
+        const sy = shake ? rand(-shake, shake) : 0;
+        ctx.save();
+        ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+        ctx.translate(sx, sy);
+        drawBackground();
+        drawWorldShadows();
+        for (const blob of blobs) drawBlob(blob);
+        for (const rag of ragdolls) drawRagdoll(rag);
+        for (const b of bricks) drawBrick(b);
+        drawDust();
+        drawDragLine();
+        ctx.restore();
+      }
+
+      function drawBackground() {
+        const sky = ctx.createLinearGradient(0, 0, W, H);
+        sky.addColorStop(0, "#172033");
+        sky.addColorStop(0.38, "#121927");
+        sky.addColorStop(1, "#0d1119");
+        ctx.fillStyle = sky;
+        ctx.fillRect(-20, -20, W + 40, H + 40);
+
+        const glow = ctx.createRadialGradient(W * 0.28, H * 0.22, 0, W * 0.28, H * 0.22, Math.max(W, H) * 0.72);
+        glow.addColorStop(0, "rgba(92, 221, 255, 0.16)");
+        glow.addColorStop(0.38, "rgba(118, 240, 209, 0.06)");
+        glow.addColorStop(1, "rgba(0, 0, 0, 0)");
+        ctx.fillStyle = glow;
+        ctx.fillRect(0, 0, W, H);
+
+        const glow2 = ctx.createRadialGradient(W * 0.78, H * 0.78, 0, W * 0.78, H * 0.78, Math.max(W, H) * 0.58);
+        glow2.addColorStop(0, "rgba(255, 159, 107, 0.13)");
+        glow2.addColorStop(0.44, "rgba(255, 202, 110, 0.05)");
+        glow2.addColorStop(1, "rgba(0, 0, 0, 0)");
+        ctx.fillStyle = glow2;
+        ctx.fillRect(0, 0, W, H);
+
+        ctx.save();
+        ctx.globalAlpha = 0.12;
+        ctx.strokeStyle = "#9fb0c6";
+        ctx.lineWidth = 1;
+        const grid = 54;
+        for (let x = bounds.left; x < bounds.right; x += grid) {
+          ctx.beginPath();
+          ctx.moveTo(x, bounds.top);
+          ctx.lineTo(x, bounds.floor);
+          ctx.stroke();
+        }
+        for (let y = bounds.top; y < bounds.floor; y += grid) {
+          ctx.beginPath();
+          ctx.moveTo(bounds.left, y);
+          ctx.lineTo(bounds.right, y);
+          ctx.stroke();
+        }
+        ctx.restore();
+
+        const floorGrad = ctx.createLinearGradient(0, bounds.floor - 22, 0, H);
+        floorGrad.addColorStop(0, "rgba(255, 255, 255, 0.12)");
+        floorGrad.addColorStop(0.08, "rgba(255, 255, 255, 0.04)");
+        floorGrad.addColorStop(1, "rgba(0, 0, 0, 0.44)");
+        ctx.fillStyle = floorGrad;
+        ctx.fillRect(0, bounds.floor, W, H - bounds.floor);
+        ctx.strokeStyle = "rgba(255, 255, 255, 0.22)";
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(bounds.left, bounds.floor + 0.5);
+        ctx.lineTo(bounds.right, bounds.floor + 0.5);
+        ctx.stroke();
+
+        const vignette = ctx.createRadialGradient(W * 0.5, H * 0.5, Math.min(W, H) * 0.2, W * 0.5, H * 0.5, Math.max(W, H) * 0.78);
+        vignette.addColorStop(0, "rgba(0,0,0,0)");
+        vignette.addColorStop(1, "rgba(0,0,0,0.44)");
+        ctx.fillStyle = vignette;
+        ctx.fillRect(0, 0, W, H);
+      }
+
+      function drawWorldShadows() {
+        ctx.save();
+        ctx.globalAlpha = 0.34;
+        for (const blob of blobs) {
+          const c = blobCenter(blob);
+          const scale = clamp((bounds.floor - c.y) / 380, 0.25, 1);
+          ctx.fillStyle = "rgba(0, 0, 0, 0.34)";
+          ctx.beginPath();
+          ctx.ellipse(c.x, bounds.floor + 7, blob.radius * 1.04 * scale, blob.radius * 0.18 * scale, 0, 0, TAU);
+          ctx.fill();
+        }
+        for (const b of bricks) {
+          const scale = clamp((bounds.floor - b.y) / 360, 0.2, 1);
+          ctx.fillStyle = "rgba(0, 0, 0, 0.23)";
+          ctx.beginPath();
+          ctx.ellipse(b.x, bounds.floor + 6, b.w * 0.58 * scale, b.h * 0.36 * scale, 0, 0, TAU);
+          ctx.fill();
+        }
+        for (const rag of ragdolls) {
+          const c = rag.pelvis;
+          const scale = clamp((bounds.floor - c.y) / 400, 0.25, 1);
+          ctx.fillStyle = "rgba(0, 0, 0, 0.25)";
+          ctx.beginPath();
+          ctx.ellipse(c.x, bounds.floor + 8, 82 * scale, 18 * scale, 0, 0, TAU);
+          ctx.fill();
+        }
+        ctx.restore();
+      }
+
+      function blobPath(blob) {
+        const pts = blob.outer;
+        ctx.beginPath();
+        for (let i = 0; i < pts.length; i++) {
+          const p0 = pts[(i - 1 + pts.length) % pts.length];
+          const p1 = pts[i];
+          const p2 = pts[(i + 1) % pts.length];
+          const x1 = (p0.x + p1.x) * 0.5;
+          const y1 = (p0.y + p1.y) * 0.5;
+          const x2 = (p1.x + p2.x) * 0.5;
+          const y2 = (p1.y + p2.y) * 0.5;
+          if (i === 0) ctx.moveTo(x1, y1);
+          ctx.quadraticCurveTo(p1.x, p1.y, x2, y2);
+        }
+        ctx.closePath();
+      }
+
+      function drawBlob(blob) {
+        const c = blobCenter(blob);
+        ctx.save();
+        ctx.shadowColor = "rgba(0, 0, 0, 0.38)";
+        ctx.shadowBlur = 22;
+        ctx.shadowOffsetY = 13;
+        blobPath(blob);
+        const grad = ctx.createRadialGradient(c.x - blob.radius * 0.35, c.y - blob.radius * 0.45, 4, c.x, c.y, blob.radius * 1.35);
+        grad.addColorStop(0, "#ffffff");
+        grad.addColorStop(0.12, blob.color.c);
+        grad.addColorStop(0.58, blob.color.a);
+        grad.addColorStop(1, blob.color.b);
+        ctx.fillStyle = grad;
+        ctx.fill();
+        ctx.shadowColor = "transparent";
+        ctx.globalCompositeOperation = "screen";
+        ctx.globalAlpha = 0.35;
+        blobPath(blob);
+        ctx.clip();
+        ctx.strokeStyle = "rgba(255,255,255,0.28)";
+        ctx.lineWidth = 7;
+        for (let i = 0; i < blob.outer.length; i += 2) {
+          const p = blob.outer[i];
+          ctx.beginPath();
+          ctx.moveTo(c.x + (p.x - c.x) * 0.18, c.y + (p.y - c.y) * 0.18);
+          ctx.lineTo(p.x, p.y);
+          ctx.stroke();
+        }
+        const h = ctx.createRadialGradient(c.x - blob.radius * 0.28, c.y - blob.radius * 0.33, 0, c.x - blob.radius * 0.28, c.y - blob.radius * 0.33, blob.radius * 0.55);
+        h.addColorStop(0, "rgba(255,255,255,0.85)");
+        h.addColorStop(0.38, "rgba(255,255,255,0.18)");
+        h.addColorStop(1, "rgba(255,255,255,0)");
+        ctx.fillStyle = h;
+        ctx.beginPath();
+        ctx.ellipse(c.x - blob.radius * 0.28, c.y - blob.radius * 0.33, blob.radius * 0.34, blob.radius * 0.17, -0.5, 0, TAU);
+        ctx.fill();
+        ctx.restore();
+
+        ctx.save();
+        blobPath(blob);
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = "rgba(255, 255, 255, 0.42)";
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      function drawCapsule(a, b, r, fill, stroke, width) {
+        const dx = b.x - a.x;
+        const dy = b.y - a.y;
+        const len = hypot(dx, dy) || 1;
+        const nx = -dy / len;
+        const ny = dx / len;
+        ctx.beginPath();
+        ctx.moveTo(a.x + nx * r, a.y + ny * r);
+        ctx.lineTo(b.x + nx * r, b.y + ny * r);
+        ctx.arc(b.x, b.y, r, Math.atan2(ny, nx), Math.atan2(-ny, -nx), false);
+        ctx.lineTo(a.x - nx * r, a.y - ny * r);
+        ctx.arc(a.x, a.y, r, Math.atan2(-ny, -nx), Math.atan2(ny, nx), false);
+        ctx.closePath();
+        ctx.fillStyle = fill;
+        ctx.fill();
+        if (stroke) {
+          ctx.lineWidth = width || 1;
+          ctx.strokeStyle = stroke;
+          ctx.stroke();
+        }
+      }
+
+      function drawRagdoll(rag) {
+        ctx.save();
+        ctx.shadowColor = "rgba(0, 0, 0, 0.32)";
+        ctx.shadowBlur = 18;
+        ctx.shadowOffsetY = 11;
+        const cloth = ctx.createLinearGradient(rag.neck.x - 40, rag.neck.y, rag.pelvis.x + 44, rag.pelvis.y);
+        cloth.addColorStop(0, "#6f88ad");
+        cloth.addColorStop(0.48, "#435a80");
+        cloth.addColorStop(1, "#24324d");
+        const limb = "#576f93";
+        const seam = "rgba(225, 236, 255, 0.28)";
+        drawCapsule(rag.ls, rag.le, 12, limb, seam);
+        drawCapsule(rag.le, rag.lw, 11, "#4f6688", seam);
+        drawCapsule(rag.rs, rag.re, 12, limb, seam);
+        drawCapsule(rag.re, rag.rw, 11, "#4f6688", seam);
+        drawCapsule(rag.lh, rag.lk, 13, "#465f83", seam);
+        drawCapsule(rag.lk, rag.la, 12, "#3c5275", seam);
+        drawCapsule(rag.rh, rag.rk, 13, "#465f83", seam);
+        drawCapsule(rag.rk, rag.ra, 12, "#3c5275", seam);
+
+        ctx.beginPath();
+        ctx.moveTo(rag.ls.x, rag.ls.y);
+        ctx.lineTo(rag.rs.x, rag.rs.y);
+        ctx.lineTo(rag.rh.x + 4, rag.rh.y + 5);
+        ctx.lineTo(rag.pelvis.x, rag.pelvis.y + 13);
+        ctx.lineTo(rag.lh.x - 4, rag.lh.y + 5);
+        ctx.closePath();
+        ctx.fillStyle = cloth;
+        ctx.fill();
+        ctx.shadowColor = "transparent";
+        ctx.strokeStyle = "rgba(255,255,255,0.18)";
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        ctx.strokeStyle = "rgba(7,12,22,0.28)";
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(rag.neck.x, rag.neck.y + 8);
+        ctx.lineTo(rag.pelvis.x, rag.pelvis.y + 6);
+        ctx.stroke();
+
+        const headGrad = ctx.createRadialGradient(rag.head.x - 8, rag.head.y - 10, 2, rag.head.x, rag.head.y, rag.head.r * 1.1);
+        headGrad.addColorStop(0, "#fff4db");
+        headGrad.addColorStop(0.45, "#d2a56d");
+        headGrad.addColorStop(1, "#895c41");
+        ctx.fillStyle = headGrad;
+        ctx.beginPath();
+        ctx.arc(rag.head.x, rag.head.y, rag.head.r, 0, TAU);
+        ctx.fill();
+        ctx.strokeStyle = "rgba(255,255,255,0.25)";
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        for (const name of ["ls", "rs", "le", "re", "lh", "rh", "lk", "rk"]) {
+          const p = rag[name];
+          ctx.fillStyle = "rgba(15,23,38,0.42)";
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, 4.2, 0, TAU);
+          ctx.fill();
+        }
+        ctx.restore();
+      }
+
+      function drawRoundRectPath(x, y, w, h, r) {
+        const rr = Math.min(r, w * 0.5, h * 0.5);
+        ctx.beginPath();
+        ctx.moveTo(x + rr, y);
+        ctx.lineTo(x + w - rr, y);
+        ctx.quadraticCurveTo(x + w, y, x + w, y + rr);
+        ctx.lineTo(x + w, y + h - rr);
+        ctx.quadraticCurveTo(x + w, y + h, x + w - rr, y + h);
+        ctx.lineTo(x + rr, y + h);
+        ctx.quadraticCurveTo(x, y + h, x, y + h - rr);
+        ctx.lineTo(x, y + rr);
+        ctx.quadraticCurveTo(x, y, x + rr, y);
+        ctx.closePath();
+      }
+
+      function drawBrick(b) {
+        ctx.save();
+        ctx.translate(b.x, b.y);
+        ctx.rotate(b.angle);
+        ctx.shadowColor = "rgba(0, 0, 0, 0.28)";
+        ctx.shadowBlur = 13;
+        ctx.shadowOffsetY = 7;
+        drawRoundRectPath(-b.hw, -b.hh, b.w, b.h, 5);
+        const g = ctx.createLinearGradient(-b.hw, -b.hh, b.hw, b.hh);
+        g.addColorStop(0, lighten(b.color, 24));
+        g.addColorStop(0.48, b.color);
+        g.addColorStop(1, darken(b.color, 22));
+        ctx.fillStyle = g;
+        ctx.fill();
+        ctx.shadowColor = "transparent";
+        ctx.strokeStyle = "rgba(255, 229, 205, 0.22)";
+        ctx.lineWidth = 1.2;
+        ctx.stroke();
+        ctx.strokeStyle = "rgba(77, 36, 29, 0.28)";
+        ctx.beginPath();
+        ctx.moveTo(-b.hw + 9, -b.hh + b.h * 0.52);
+        ctx.lineTo(b.hw - 9, -b.hh + b.h * 0.52);
+        ctx.stroke();
+        ctx.fillStyle = "rgba(255, 255, 255, 0.13)";
+        drawRoundRectPath(-b.hw + 5, -b.hh + 4, b.w - 10, 4, 2);
+        ctx.fill();
+        ctx.restore();
+      }
+
+      function lighten(hex, amount) {
+        return shiftColor(hex, amount);
+      }
+
+      function darken(hex, amount) {
+        return shiftColor(hex, -amount);
+      }
+
+      function shiftColor(hex, amount) {
+        const n = parseInt(hex.slice(1), 16);
+        let r = (n >> 16) + amount;
+        let g = ((n >> 8) & 255) + amount;
+        let b = (n & 255) + amount;
+        r = clamp(r, 0, 255) | 0;
+        g = clamp(g, 0, 255) | 0;
+        b = clamp(b, 0, 255) | 0;
+        return "#" + (r << 16 | g << 8 | b).toString(16).padStart(6, "0");
+      }
+
+      function drawDust() {
+        ctx.save();
+        for (const p of dust) {
+          const a = clamp(p.life / p.maxLife, 0, 1);
+          ctx.globalAlpha = a * 0.72;
+          ctx.fillStyle = p.color;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.r * (1.4 - a * 0.25), 0, TAU);
+          ctx.fill();
+        }
+        ctx.globalAlpha = 1;
+        ctx.strokeStyle = "rgba(255, 221, 139, 0.82)";
+        ctx.lineWidth = 1.5;
+        for (const s of sparks) {
+          ctx.globalAlpha = clamp(s.life / 0.28, 0, 1);
+          ctx.beginPath();
+          ctx.moveTo(s.x, s.y);
+          ctx.lineTo(s.x - s.vx * 0.025, s.y - s.vy * 0.025);
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+
+      function drawDragLine() {
+        if (!grabs.active) return;
+        let x = grabs.targetX;
+        let y = grabs.targetY;
+        if (grabs.type === "particle" && grabs.particle) {
+          x = grabs.particle.x;
+          y = grabs.particle.y;
+        } else if (grabs.type === "rigid" && grabs.rigid) {
+          const p = grabs.rigid.worldPoint(grabs.localX, grabs.localY);
+          x = p.x;
+          y = p.y;
+        }
+        ctx.save();
+        ctx.strokeStyle = "rgba(118, 240, 209, 0.72)";
+        ctx.lineWidth = 2;
+        ctx.setLineDash([7, 7]);
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(grabs.targetX, grabs.targetY);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle = "rgba(118, 240, 209, 0.16)";
+        ctx.strokeStyle = "rgba(255,255,255,0.48)";
+        ctx.beginPath();
+        ctx.arc(grabs.targetX, grabs.targetY, 13, 0, TAU);
+        ctx.fill();
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      function pointInPolygon(x, y, pts) {
+        let inside = false;
+        for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+          const pi = pts[i];
+          const pj = pts[j];
+          if ((pi.y > y) !== (pj.y > y) && x < (pj.x - pi.x) * (y - pi.y) / (pj.y - pi.y + 0.00001) + pi.x) inside = !inside;
+        }
+        return inside;
+      }
+
+      function pickBody(x, y) {
+        for (let i = bricks.length - 1; i >= 0; i--) {
+          const b = bricks[i];
+          if (b.containsPoint(x, y)) {
+            const l = b.localPoint(x, y);
+            return { type: "rigid", rigid: b, localX: l.x, localY: l.y };
+          }
+        }
+        let best = null;
+        for (const blob of blobs) {
+          if (pointInPolygon(x, y, blob.outer)) {
+            best = { type: "particle", particle: blob.center, entity: blob, score: 0 };
+          }
+        }
+        for (const p of particles) {
+          if (!p.grabbable) continue;
+          const d = hypot(x - p.x, y - p.y);
+          const hit = p.material === "head" ? p.r + 8 : Math.max(22, p.r + 12);
+          if (d <= hit && (!best || d < best.score)) {
+            best = { type: "particle", particle: p, entity: p.entity, score: d };
+          }
+        }
+        return best;
+      }
+
+      function pushHistory(x, y) {
+        const now = performance.now();
+        grabs.history.push({ x, y, t: now });
+        while (grabs.history.length > 8 || (grabs.history.length && now - grabs.history[0].t > 140)) grabs.history.shift();
+      }
+
+      function releaseVelocity() {
+        const h = grabs.history;
+        if (h.length < 2) return { x: 0, y: 0 };
+        const first = h[0];
+        const last = h[h.length - 1];
+        const dt = Math.max(0.016, (last.t - first.t) / 1000);
+        let vx = (last.x - first.x) / dt;
+        let vy = (last.y - first.y) / dt;
+        const sp = hypot(vx, vy);
+        if (sp > MAX_SPEED) {
+          const s = MAX_SPEED / sp;
+          vx *= s;
+          vy *= s;
+        }
+        return { x: vx, y: vy };
+      }
+
+      function onPointerDown(event) {
+        const rect = canvas.getBoundingClientRect();
+        const x = event.clientX - rect.left;
+        const y = event.clientY - rect.top;
+        const hit = pickBody(x, y);
+        if (!hit) return;
+        canvas.setPointerCapture(event.pointerId);
+        canvas.classList.add("dragging");
+        grabs.active = true;
+        grabs.pointerId = event.pointerId;
+        grabs.type = hit.type;
+        grabs.targetX = x;
+        grabs.targetY = y;
+        grabs.particle = hit.particle || null;
+        grabs.rigid = hit.rigid || null;
+        grabs.localX = hit.localX || 0;
+        grabs.localY = hit.localY || 0;
+        grabs.entity = hit.entity || hit.rigid || null;
+        grabs.history.length = 0;
+        pushHistory(x, y);
+        if (grabs.rigid) grabs.rigid.wake();
+      }
+
+      function onPointerMove(event) {
+        if (!grabs.active || grabs.pointerId !== event.pointerId) return;
+        const rect = canvas.getBoundingClientRect();
+        const x = event.clientX - rect.left;
+        const y = event.clientY - rect.top;
+        grabs.targetX = clamp(x, bounds.left, bounds.right);
+        grabs.targetY = clamp(y, bounds.top, bounds.floor);
+        pushHistory(grabs.targetX, grabs.targetY);
+      }
+
+      function onPointerUp(event) {
+        if (!grabs.active || grabs.pointerId !== event.pointerId) return;
+        const v = releaseVelocity();
+        if (grabs.type === "particle" && grabs.entity && grabs.entity.particles) {
+          for (const p of grabs.entity.particles) {
+            const factor = p === grabs.particle ? 1.05 : grabs.entity.type === "blob" ? 0.82 : 0.64;
+            const old = p.velocity(FIXED_DT);
+            p.setVelocity(old.x * 0.25 + v.x * factor, old.y * 0.25 + v.y * factor, FIXED_DT);
+          }
+        } else if (grabs.type === "particle" && grabs.particle) {
+          grabs.particle.setVelocity(v.x, v.y, FIXED_DT);
+        } else if (grabs.type === "rigid" && grabs.rigid) {
+          const b = grabs.rigid;
+          const wp = b.worldPoint(grabs.localX, grabs.localY);
+          b.vx = v.x;
+          b.vy = v.y;
+          b.av += clamp(cross(wp.x - b.x, wp.y - b.y, v.x, v.y) * b.invI * 0.35, -9, 9);
+          b.wake();
+        }
+        grabs.active = false;
+        grabs.pointerId = null;
+        grabs.particle = null;
+        grabs.rigid = null;
+        grabs.entity = null;
+        grabs.history.length = 0;
+        canvas.classList.remove("dragging");
+      }
+
+      function frame(now) {
+        const raw = Math.min(0.055, (now - lastTime) / 1000);
+        lastTime = now;
+        accumulator += raw;
+        let steps = 0;
+        while (accumulator >= FIXED_DT && steps < 4) {
+          step(FIXED_DT);
+          accumulator -= FIXED_DT;
+          steps++;
+        }
+        if (steps === 4) accumulator = 0;
+        fps = mix(fps, 1 / Math.max(raw, 0.001), 0.08);
+        render();
+        updateHud();
+        requestAnimationFrame(frame);
+      }
+
+      function updateHud() {
+        fpsEl.textContent = Math.round(fps) + " fps";
+        countEl.textContent = (blobs.length + ragdolls.length + bricks.length) + " bodies";
+      }
+
+      function addJellyFromButton() {
+        const palette = jellyPalette[Math.floor(Math.random() * jellyPalette.length)];
+        const x = clamp(rand(bounds.left + 120, bounds.left + W * 0.48), bounds.left + 65, bounds.right - 65);
+        const y = bounds.top + rand(95, 210);
+        const b = createBlob(x, y, rand(36, 53), palette);
+        if (b) {
+          for (const p of b.particles) p.setVelocity(rand(-180, 180), rand(-40, 80), FIXED_DT);
+        }
+      }
+
+      function setupUi() {
+        gravityEl.addEventListener("input", () => {
+          gravity = Number(gravityEl.value);
+          gvalEl.textContent = String(gravity);
+        });
+        document.getElementById("addJelly").addEventListener("click", addJellyFromButton);
+        document.getElementById("dropRagdoll").addEventListener("click", () => {
+          const rag = createRagdoll(clamp(rand(bounds.left + 180, bounds.right - 300), bounds.left + 100, bounds.right - 100), bounds.top + 105);
+          for (const p of rag.particles) p.setVelocity(rand(-80, 80), rand(-30, 50), FIXED_DT);
+        });
+        document.getElementById("rebuildWall").addEventListener("click", createWall);
+        document.getElementById("reset").addEventListener("click", seedWorld);
+        canvas.addEventListener("pointerdown", onPointerDown);
+        canvas.addEventListener("pointermove", onPointerMove);
+        canvas.addEventListener("pointerup", onPointerUp);
+        canvas.addEventListener("pointercancel", onPointerUp);
+        window.addEventListener("resize", () => {
+          resize();
+          createWall();
+        });
+        window.addEventListener("keydown", (event) => {
+          if (event.key.toLowerCase() === "f") {
+            if (!document.fullscreenElement) document.documentElement.requestFullscreen().catch(() => {});
+            else document.exitFullscreen().catch(() => {});
+          }
+        });
+      }
+
+      window.advanceTime = (ms) => {
+        const steps = Math.max(1, Math.round(ms / (1000 / 60)));
+        for (let i = 0; i < steps; i++) step(FIXED_DT);
+        render();
+        updateHud();
+      };
+
+      window.render_game_to_text = () => {
+        const sampleBlob = blobs[0] ? blobCenter(blobs[0]) : null;
+        return JSON.stringify({
+          coordinateSystem: "origin top-left, x right, y down, units pixels",
+          gravity,
+          fps: Math.round(fps),
+          bodies: { jelly: blobs.length, ragdolls: ragdolls.length, bricks: bricks.length, particles: particles.length },
+          grabbed: grabs.active ? grabs.type : "none",
+          firstJelly: sampleBlob ? { x: Math.round(sampleBlob.x), y: Math.round(sampleBlob.y), radius: Math.round(blobs[0].radius) } : null,
+          wall: bricks.slice(0, 5).map((b) => ({ x: Math.round(b.x), y: Math.round(b.y), angle: Number(b.angle.toFixed(2)) }))
+        });
+      };
+
+      resize();
+      setupUi();
+      seedWorld();
+      requestAnimationFrame((t) => {
+        lastTime = t;
+        requestAnimationFrame(frame);
+      });
+    })();
+  </script>
+</body>
+</html>

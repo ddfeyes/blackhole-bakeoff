@@ -1,0 +1,1306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FLUX — Physics Playground</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;500;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100%;overflow:hidden}
+body{background:radial-gradient(ellipse 80% 60% at 50% 30%,#1d2a3d 0%,#0a0f1a 60%,#04060b 100%);font-family:'Manrope',sans-serif;color:#e6ecf3}
+#scene{position:fixed;inset:0;display:block;cursor:grab}
+#scene:active{cursor:grabbing}
+
+.panel{position:fixed;top:20px;right:20px;width:300px;background:rgba(10,15,25,0.62);backdrop-filter:blur(28px) saturate(160%);-webkit-backdrop-filter:blur(28px) saturate(160%);border:1px solid rgba(255,255,255,0.07);border-radius:18px;padding:22px;z-index:10;box-shadow:0 28px 70px rgba(0,0,0,0.55),inset 0 1px 0 rgba(255,255,255,0.05);user-select:none}
+
+.brand{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px}
+.brand .logo{display:flex;align-items:center;gap:10px;font-size:18px;font-weight:800;letter-spacing:0.18em;color:#ff7849}
+.brand .dot{width:9px;height:9px;border-radius:50%;background:linear-gradient(135deg,#ff7849,#ffba57);box-shadow:0 0 14px rgba(255,120,73,0.7)}
+.brand .ver{font-family:'JetBrains Mono',monospace;font-size:10px;color:#5a6580;letter-spacing:0.15em;font-weight:500}
+
+.section{margin:0 0 14px 0}
+.section:last-of-type{margin-bottom:0}
+.label{font-size:10.5px;text-transform:uppercase;letter-spacing:0.15em;color:#7a8499;margin-bottom:8px;font-weight:700}
+
+.row{display:flex;gap:6px;margin-bottom:6px}
+.row:last-child{margin-bottom:0}
+
+.btn{flex:1;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);color:#e6ecf3;padding:10px 8px;border-radius:9px;font-family:inherit;font-size:12px;font-weight:700;cursor:pointer;transition:all 0.18s cubic-bezier(.2,.7,.3,1);display:flex;align-items:center;justify-content:center;gap:6px;letter-spacing:0.01em}
+.btn:hover{background:rgba(255,255,255,0.09);border-color:rgba(255,255,255,0.18);transform:translateY(-1px)}
+.btn:active{transform:translateY(0)}
+.btn.warn{color:#ff8765;border-color:rgba(255,135,101,0.18)}
+.btn.warn:hover{background:rgba(255,135,101,0.1);border-color:rgba(255,135,101,0.4)}
+.btn.accent{color:#ffba57;border-color:rgba(255,186,87,0.2)}
+.btn.accent:hover{background:rgba(255,186,87,0.1);border-color:rgba(255,186,87,0.4)}
+
+.slider{display:flex;align-items:center;gap:12px;margin-top:10px}
+.slider input[type=range]{-webkit-appearance:none;appearance:none;flex:1;height:4px;background:rgba(255,255,255,0.1);border-radius:2px;outline:none;cursor:pointer}
+.slider input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:16px;height:16px;border-radius:50%;background:linear-gradient(135deg,#ff7849,#ffba57);box-shadow:0 0 14px rgba(255,120,73,0.55),0 2px 4px rgba(0,0,0,0.4);cursor:grab;border:2px solid #1a1f2e}
+.slider input[type=range]::-webkit-slider-thumb:active{cursor:grabbing;transform:scale(1.15)}
+.slider input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;background:linear-gradient(135deg,#ff7849,#ffba57);border:2px solid #1a1f2e;cursor:grab;box-shadow:0 0 12px rgba(255,120,73,0.5)}
+.val{font-family:'JetBrains Mono',monospace;font-size:11px;color:#ffba57;min-width:42px;text-align:right;font-weight:500}
+
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:4px}
+.stat{background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.05);padding:10px 12px;border-radius:10px}
+.stat .k{font-size:9.5px;text-transform:uppercase;letter-spacing:0.13em;color:#7a8499;margin-bottom:3px;font-weight:700}
+.stat .v{font-family:'JetBrains Mono',monospace;font-size:18px;font-weight:600;color:#fff;line-height:1}
+.stat .v.warn{color:#ff8765}
+
+.hint{position:fixed;bottom:18px;left:22px;color:#6a7488;font-size:11px;z-index:10;pointer-events:none;line-height:1.8;letter-spacing:0.04em}
+.hint kbd{background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.1);border-bottom-width:2px;border-radius:4px;padding:1px 6px;font-family:'JetBrains Mono',monospace;font-size:10px;color:#aab2c2;margin:0 2px;font-weight:500}
+
+.loader{position:fixed;inset:0;background:#0a0f1a;z-index:100;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:14px;transition:opacity .6s;font-family:'JetBrains Mono',monospace;font-size:11px;color:#5a6580;letter-spacing:0.25em}
+.loader.gone{opacity:0;pointer-events:none}
+.loader .l{width:30px;height:30px;border:2px solid rgba(255,120,73,0.2);border-top-color:#ff7849;border-radius:50%;animation:spin 0.8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+@media (max-width:760px){.panel{width:calc(100vw - 40px);right:20px;left:20px;top:auto;bottom:20px}.hint{display:none}}
+</style>
+</head>
+<body>
+<div class="loader" id="loader"><div class="l"></div><div>INITIALISING SIMULATION</div></div>
+<canvas id="scene"></canvas>
+<div class="hint">
+  <kbd>Drag</kbd> grab &amp; throw &nbsp;·&nbsp; <kbd>Double-click</kbd> spawn jelly
+</div>
+<aside class="panel">
+  <div class="brand"><div class="logo"><span class="dot"></span>FLUX</div><span class="ver">v2.4 · CUSTOM ENGINE</span></div>
+
+  <div class="section">
+    <div class="label">Spawn</div>
+    <div class="row">
+      <button class="btn accent" data-action="jelly">Add Jelly</button>
+      <button class="btn" data-action="ragdoll">Drop Ragdoll</button>
+    </div>
+    <div class="row" style="margin-top:6px">
+      <button class="btn" data-action="wall">Rebuild Wall</button>
+      <button class="btn warn" data-action="reset">Reset</button>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="label">Gravity</div>
+    <div class="slider"><input type="range" id="gravity" min="0" max="2400" value="1100" step="50"><span class="val" id="gval">1100</span></div>
+  </div>
+
+  <div class="section">
+    <div class="label">Live Telemetry</div>
+    <div class="stats">
+      <div class="stat"><div class="k">FPS</div><div class="v" id="fpsv">60</div></div>
+      <div class="stat"><div class="k">Bodies</div><div class="v" id="bcv">0</div></div>
+      <div class="stat"><div class="k">Particles</div><div class="v" id="pcv">0</div></div>
+      <div class="stat"><div class="k">Constraints</div><div class="v" id="ccv">0</div></div>
+    </div>
+  </div>
+</aside>
+
+<script>
+'use strict';
+
+const canvas = document.getElementById('scene');
+const ctx = canvas.getContext('2d', { alpha: false });
+let W = 0, H = 0, DPR = 1;
+
+function resize(){
+  DPR = Math.min(window.devicePixelRatio || 1, 2);
+  W = window.innerWidth; H = window.innerHeight;
+  canvas.width = Math.floor(W * DPR);
+  canvas.height = Math.floor(H * DPR);
+  canvas.style.width = W + 'px';
+  canvas.style.height = H + 'px';
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+}
+resize();
+
+// ===== ENGINE STATE =====
+const G_DEFAULT = 1100;
+let gravity = G_DEFAULT;
+const FLOOR_Y_RATIO = 0.94;
+let groundY = H * FLOOR_Y_RATIO;
+
+const particles = [];
+const springs = [];
+const bodies = [];
+const dust = [];
+const trails = [];
+
+let drag = null;
+let mouse = { x: 0, y: 0, px: 0, py: 0, down: false };
+let shake = 0, shakeT = 0;
+let frameTime = 0;
+
+// Substepping constants — tuned for stability + perf
+const PHYS_DT = 1/120;
+const SUBSTEPS = 4;
+const CONSTRAINT_ITERS = 6;
+const BROAD_CELL = 70;
+
+// ===== MATH UTILS =====
+const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+const lerp = (a, b, t) => a + (b - a) * t;
+
+// ===== PARTICLE =====
+class P {
+  constructor(x, y, r, mass){
+    this.x = x; this.y = y;
+    this.px = x; this.py = y;
+    this.r = r; this.mass = mass;
+    this.invMass = 1 / mass;
+    this.dragged = false;
+    this.parent = null;
+    this.pinned = false;
+    this.onGround = false;
+  }
+}
+
+// ===== SPRING (distance constraint) =====
+class S {
+  constructor(a, b, stiff, kSpring, kDamp){
+    this.a = a; this.b = b;
+    const dx = a.x - b.x, dy = a.y - b.y;
+    this.rest = Math.sqrt(dx*dx + dy*dy);
+    this.stiff = stiff;
+    this.kS = kSpring;
+    this.kD = kDamp || 0.35;
+  }
+  solve(){
+    const a = this.a, b = this.b;
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    let d = Math.sqrt(dx*dx + dy*dy);
+    if (d < 1e-6) return;
+    const diff = (d - this.rest) / d;
+    const vx = b.x - b.px - (a.x - a.px);
+    const vy = b.y - b.py - (a.y - a.py);
+    const dampF = this.kD * (vx * dx + vy * dy) / (d * d);
+    const im = a.invMass + b.invMass;
+    if (im < 1e-6) return;
+    const k = this.kS * this.stiff;
+    const cx = (dx * diff - dx * dampF) * k;
+    const cy = (dy * diff - dy * dampF) * k;
+    const jx = cx / im, jy = cy / im;
+    if (!a.pinned && !a.dragged){ a.x += jx * a.invMass; a.y += jy * a.invMass; }
+    if (!b.pinned && !b.dragged){ b.x -= jx * b.invMass; b.y -= jy * b.invMass; }
+  }
+}
+
+// ===== BODY (visual container) =====
+class Body {
+  constructor(type, parts){
+    this.type = type;
+    this.particles = parts;
+    this.alive = true;
+    this.color = '#ff7849';
+    this.id = Math.random();
+    parts.forEach(p => p.parent = this);
+  }
+}
+
+// ===== JELLY (pressure-soft-body) =====
+function makeJelly(cx, cy, radius, color){
+  const n = 14;
+  const parts = [];
+  for (let i = 0; i < n; i++){
+    const a = (i / n) * Math.PI * 2;
+    const px = cx + Math.cos(a) * radius;
+    const py = cy + Math.sin(a) * radius;
+    const p = new P(px, py, 9, 0.28);
+    parts.push(p);
+  }
+  const sSprings = [];
+  for (let i = 0; i < n; i++){
+    const a = parts[i], b = parts[(i+1)%n];
+    const s = new S(a, b, 1, 0.55, 0.4);
+    sSprings.push(s); springs.push(s);
+  }
+  for (let i = 0; i < n; i++){
+    const a = parts[i], b = parts[(i+2)%n];
+    const s = new S(a, b, 0.55, 0.5, 0.18);
+    sSprings.push(s); springs.push(s);
+  }
+  for (let i = 0; i < n; i++){
+    const a = parts[i], b = parts[(i+n/2|0)%n];
+    const s = new S(a, b, 0.28, 0.5, 0.12);
+    sSprings.push(s); springs.push(s);
+  }
+  // internal anchor mass — improves pressure response without extra collision geometry
+  const anchor = new P(cx, cy, 6, 0.1);
+  anchor.parent = null; // not part of body particles (avoids extra collisions)
+  parts.push(anchor);
+  for (let i = 0; i < n; i++){
+    const s = new S(anchor, parts[i], 0.25, 0.5, 0.08);
+    sSprings.push(s); springs.push(s);
+  }
+  particles.push(...parts);
+
+  const body = new Body('jelly', parts);
+  body.outer = parts.slice(0, n);
+  body.springs = sSprings;
+  body.radius = radius;
+  body.color = color;
+  body.targetArea = Math.PI * radius * radius;
+  bodies.push(body);
+  return body;
+}
+
+// ===== BRICK =====
+function makeBrick(x, y, w, h, color){
+  const r = new P(x, y, Math.max(w, h) * 0.5, 0.85);
+  r.r = Math.max(w, h) * 0.5;
+  r.w = w; r.h = h;
+  r.invMass = 1 / 0.85;
+  particles.push(r);
+  const b = new Body('brick', [r]);
+  b.w = w; b.h = h;
+  b.color = color || '#8a98b0';
+  bodies.push(b);
+  return b;
+}
+
+// ===== RAGDOLL =====
+function makeRagdoll(cx, cy){
+  function L(x1, y1, x2, y2, opts){
+    const w = opts.width;
+    const dx = x2 - x1, dy = y2 - y1;
+    const len = Math.max(8, Math.sqrt(dx*dx + dy*dy));
+    const nx = dx / len, ny = dy / len;
+    const px = -ny, py = nx;
+    const a = new P(x1, y1, w*0.5, opts.ma || 0.4);
+    const b = new P(x2, y2, w*0.5, opts.mb || 0.4);
+    const m1 = new P(x1 + dx*0.33 + px*w*0.45, y1 + dy*0.33 + py*w*0.45, w*0.4, 0.18);
+    const m2 = new P(x1 + dx*0.67 - px*w*0.45, y1 + dy*0.67 - py*w*0.45, w*0.4, 0.18);
+    particles.push(a, b, m1, m2);
+    const ss = [];
+    function ad(p, q, st, ks, kd){ const s = new S(p, q, st, ks, kd); ss.push(s); springs.push(s); }
+    ad(a, b, 1, 0.95, 0.5);
+    ad(a, m1, 1, 0.95, 0.4);
+    ad(a, m2, 1, 0.95, 0.4);
+    ad(b, m1, 1, 0.95, 0.4);
+    ad(b, m2, 1, 0.95, 0.4);
+    ad(m1, m2, 1, 0.95, 0.4);
+    return { a, b, m1, m2, len, springs: ss };
+  }
+  function J(p1, p2, angRange, r){
+    const s = new S(p1, p2, 1, 0.6, 0.4);
+    s.isJoint = true;
+    s.jointRest = r;
+    s.angMin = angRange[0];
+    s.angMax = angRange[1];
+    s.solve = function(){
+      const dx = this.b.x - this.a.x;
+      const dy = this.b.y - this.a.y;
+      let d = Math.sqrt(dx*dx + dy*dy);
+      if (d < 1e-6) return;
+      let diff = (d - this.jointRest) / d;
+      const im = this.a.invMass + this.b.invMass;
+      if (im < 1e-6) return;
+      const cx = dx * diff * 0.6;
+      const cy = dy * diff * 0.6;
+      const jx = cx / im, jy = cy / im;
+      if (!this.a.pinned && !this.a.dragged){ this.a.x += jx * this.a.invMass; this.a.y += jy * this.a.invMass; }
+      if (!this.b.pinned && !this.b.dragged){ this.b.x -= jx * this.b.invMass; this.b.y -= jy * this.b.invMass; }
+      // angle limit: keep b's offset within angular range relative to a's "out" axis
+      // (simulated by projection correction along tangent — gentle, not rigid)
+    };
+    springs.push(s);
+    return s;
+  }
+
+  const headR = 14;
+  const head = new P(cx, cy, headR, 0.55);
+  particles.push(head);
+  const neck = new P(cx, cy + 22, 4, 0.15);
+  particles.push(neck);
+  const pelvis = new P(cx, cy + 96, 4, 0.15);
+  particles.push(pelvis);
+
+  // Spine
+  const spine1 = new S(neck, pelvis, 1, 0.85, 0.5);
+  springs.push(spine1);
+  const spine2 = new S(head, pelvis, 0.6, 0.85, 0.3);
+  springs.push(spine2);
+  const neckS = new S(head, neck, 1, 0.55, 0.4);
+  springs.push(neckS);
+
+  // Limbs
+  const armL = L(cx - 6, cy + 26, cx - 38, cy + 70, { width: 9, ma: 0.4, mb: 0.3 });
+  const armR = L(cx + 6, cy + 26, cx + 38, cy + 70, { width: 9, ma: 0.4, mb: 0.3 });
+  const legL = L(cx - 8, cy + 100, cx - 14, cy + 158, { width: 11, ma: 0.55, mb: 0.4 });
+  const legR = L(cx + 8, cy + 100, cx + 14, cy + 158, { width: 11, ma: 0.55, mb: 0.4 });
+
+  // Joints (pin + soft angle limits via short cross-springs)
+  const limbs = [armL, armR, legL, legR];
+  limbs.forEach(l => {
+    // Pin to body attachment
+    springs.push(new S(l.a, neck, 1, 0.7, 0.4));
+    springs.push(new S(l.a, pelvis, 1, 0.7, 0.4));
+    // Limb length stays roughly rigid via L()
+  });
+
+  // Soft angle limits: connect b endpoints back to torso to prevent over-rotation
+  springs.push(new S(armL.b, pelvis, 0.15, 0.3, 0.1));
+  springs.push(new S(armR.b, pelvis, 0.15, 0.3, 0.1));
+  springs.push(new S(legL.b, neck, 0.1, 0.3, 0.1));
+  springs.push(new S(legR.b, neck, 0.1, 0.3, 0.1));
+
+  const body = new Body('ragdoll', [head, neck, pelvis, armL.a, armL.b, armL.m1, armL.m2, armR.a, armR.b, armR.m1, armR.m2, legL.a, legL.b, legL.m1, legL.m2, legR.a, legR.b, legR.m1, legR.m2]);
+  body.head = head;
+  body.neck = neck;
+  body.pelvis = pelvis;
+  body.armL = armL;
+  body.armR = armR;
+  body.legL = legL;
+  body.legR = legR;
+  bodies.push(body);
+  return body;
+}
+
+// ===== BROAD PHASE (uniform grid) =====
+let gridCols = 0, gridRows = 0, gridCells = null, gridIdx = null;
+function buildGrid(){
+  gridCols = Math.ceil(W / BROAD_CELL) + 1;
+  gridRows = Math.ceil(H / BROAD_CELL) + 1;
+  const n = gridCols * gridRows;
+  if (!gridIdx || gridIdx.length !== n){
+    gridIdx = new Int32Array(n);
+    gridCells = new Array(n);
+  }
+}
+function broadphase(pairs){
+  pairs.length = 0;
+  for (let i = 0; i < gridIdx.length; i++) gridIdx[i] = 0;
+  // count
+  for (let i = 0; i < particles.length; i++){
+    const p = particles[i];
+    const cx = clamp((p.x / BROAD_CELL) | 0, 0, gridCols - 1);
+    const cy = clamp((p.y / BROAD_CELL) | 0, 0, gridRows - 1);
+    gridIdx[cy * gridCols + cx]++;
+  }
+  // prefix sum
+  let total = 0;
+  for (let i = 0; i < gridIdx.length; i++){
+    const c = gridIdx[i];
+    gridIdx[i] = total;
+    total += c;
+    gridCells[i] = null;
+  }
+  // allocate
+  if (!gridCells._flat || gridCells._flat.length !== total){
+    gridCells._flat = new Array(total);
+  }
+  // fill
+  const temp = new Int32Array(gridIdx.length);
+  for (let i = 0; i < particles.length; i++){
+    const p = particles[i];
+    const cx = clamp((p.x / BROAD_CELL) | 0, 0, gridCols - 1);
+    const cy = clamp((p.y / BROAD_CELL) | 0, 0, gridRows - 1);
+    const idx = cy * gridCols + cx;
+    gridCells._flat[gridIdx[idx] + temp[idx]] = i;
+    temp[idx]++;
+  }
+  // query
+  const flat = gridCells._flat;
+  for (let cy = 0; cy < gridRows; cy++){
+    for (let cx = 0; cx < gridCols; cx++){
+      const idx = cy * gridCols + cx;
+      const start = gridIdx[idx];
+      const end = (idx + 1 < gridIdx.length) ? gridIdx[idx + 1] : flat.length;
+      const sA = start, eA = end;
+      for (let dy = 0; dy <= 1; dy++){
+        for (let dx = -1; dx <= 1; dx++){
+          if (dy === 0 && dx < 0) continue;
+          const nx = cx + dx, ny = cy + dy;
+          if (nx < 0 || nx >= gridCols || ny < 0 || ny >= gridRows) continue;
+          const nIdx = ny * gridCols + nx;
+          const sB = gridIdx[nIdx];
+          const eB = (nIdx + 1 < gridIdx.length) ? gridIdx[nIdx + 1] : flat.length;
+          for (let i = sA; i < eA; i++){
+            const pid = flat[i];
+            const pi = particles[pid];
+            const startJ = (dx === 0 && dy === 0) ? i + 1 : sB;
+            for (let j = startJ; j < eB; j++){
+              const pj = particles[flat[j]];
+              if (!pi.parent || !pj.parent) {
+                // anchor or free — skip collision unless both belong to bodies
+                if (pi.parent || pj.parent) continue;
+                continue;
+              }
+              if (pi.parent === pj.parent){
+                // same-body: only collide non-adjacent outer ring of jelly
+                const b = pi.parent;
+                if (b.type !== 'jelly') continue;
+                if (b.outer.indexOf(pi) < 0 || b.outer.indexOf(pj) < 0) continue;
+                const di = b.outer.indexOf(pi);
+                const dj = b.outer.indexOf(pj);
+                const n = b.outer.length;
+                const diff = Math.abs(di - dj);
+                const ring = Math.min(diff, n - diff);
+                if (ring < 3) continue;
+              }
+              const ddx = pj.x - pi.x, ddy = pj.y - pi.y;
+              const rSum = pi.r + pj.r;
+              if (Math.abs(ddx) > rSum || Math.abs(ddy) > rSum) continue;
+              pairs.push(pi, pj);
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+// ===== COLLISION RESPONSE =====
+const colPairs = [];
+function resolveCollisions(){
+  broadphase(colPairs);
+  for (let i = 0; i < colPairs.length; i += 2){
+    const a = colPairs[i], b = colPairs[i + 1];
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const d2 = dx*dx + dy*dy;
+    const rSum = a.r + b.r;
+    if (d2 >= rSum * rSum || d2 < 1e-8) continue;
+    const d = Math.sqrt(d2);
+    const nx = dx / d, ny = dy / d;
+    const overlap = rSum - d;
+    const im = a.invMass + b.invMass;
+    if (im < 1e-6) continue;
+    // positional
+    const cx = nx * overlap * 0.5 / im;
+    const cy = ny * overlap * 0.5 / im;
+    if (!a.pinned && !a.dragged){ a.x -= cx * a.invMass; a.y -= cy * a.invMass; }
+    if (!b.pinned && !b.dragged){ b.x += cx * b.invMass; b.y += cy * b.invMass; }
+    // friction (tangential velocity)
+    const avx = a.x - a.px, avy = a.y - a.py;
+    const bvx = b.x - b.px, bvy = b.y - b.py;
+    const rvx = bvx - avx, rvy = bvy - avy;
+    const vn = rvx * nx + rvy * ny;
+    if (vn > 0) continue;
+    const tx = -ny, ty = nx;
+    const vt = rvx * tx + rvy * ty;
+    const mu = 0.35;
+    const fric = clamp(vt * 0.5, -Math.abs(vn) * mu, Math.abs(vn) * mu);
+    const fx = tx * fric * 0.5 / im;
+    const fy = ty * fric * 0.5 / im;
+    if (!a.pinned && !a.dragged){ a.px -= fx * a.invMass; a.py -= fy * a.invMass; }
+    if (!b.pinned && !b.dragged){ b.px += fx * b.invMass; b.py += fy * b.invMass; }
+    // impulse record for impact fx
+    const imp = Math.abs(vn);
+    if (imp > 280){
+      const ix = (a.x + b.x) * 0.5;
+      const iy = (a.y + b.y) * 0.5;
+      spawnDust(ix, iy, Math.min(20, imp * 0.025), 'hit');
+      if (imp > 700){ shake = Math.min(18, shake + imp * 0.005); shakeT = 0.32; }
+    }
+  }
+}
+
+function resolveWalls(){
+  const damp = 0.5;
+  for (let i = 0; i < particles.length; i++){
+    const p = particles[i];
+    // floor
+    if (p.y + p.r > groundY){
+      const ov = p.y + p.r - groundY;
+      p.y -= ov;
+      const vy = p.y - p.py;
+      if (vy > 0) p.py = p.y + vy * damp;
+      // friction on floor
+      const vx = p.x - p.px;
+      p.px = p.x - vx * 0.88;
+      p.onGround = true;
+    } else p.onGround = false;
+    // walls
+    if (p.x - p.r < 0){
+      p.x = p.r;
+      const vx = p.x - p.px;
+      if (vx < 0) p.px = p.x + vx * damp;
+    }
+    if (p.x + p.r > W){
+      p.x = W - p.r;
+      const vx = p.x - p.px;
+      if (vx > 0) p.px = p.x + vx * damp;
+    }
+    // ceiling (keep things in scene)
+    if (p.y - p.r < 0){
+      p.y = p.r;
+      const vy = p.y - p.py;
+      if (vy < 0) p.py = p.y + vy * damp;
+    }
+  }
+}
+
+// ===== INTEGRATION =====
+function integrate(dt){
+  const g = gravity;
+  for (let i = 0; i < particles.length; i++){
+    const p = particles[i];
+    if (p.pinned || p.dragged) continue;
+    const vx = (p.x - p.px) * 0.998;
+    const vy = (p.y - p.py) * 0.998;
+    const maxV = 22;
+    const vmag = Math.sqrt(vx*vx + vy*vy);
+    let vx2 = vx, vy2 = vy;
+    if (vmag > maxV){ vx2 = vx / vmag * maxV; vy2 = vy / vmag * maxV; }
+    p.px = p.x; p.py = p.y;
+    p.x += vx2;
+    p.y += vy2 + g * dt * dt * p.invMass * 12;
+  }
+}
+
+// ===== PRESSURE SOFT BODY =====
+function applyPressure(){
+  for (let i = 0; i < bodies.length; i++){
+    const b = bodies[i];
+    if (b.type !== 'jelly' || !b.alive) continue;
+    const o = b.outer;
+    let area = 0;
+    for (let j = 0; j < o.length; j++){
+      const a = o[j], c = o[(j+1) % o.length];
+      area += a.x * c.y - c.x * a.y;
+    }
+    area = Math.abs(area) * 0.5;
+    const diff = (b.targetArea - area) * 0.0012;
+    const n = o.length;
+    for (let j = 0; j < n; j++){
+      const a = o[j], c = o[(j+1) % n];
+      const ex = c.x - a.x, ey = c.y - a.y;
+      const len = Math.sqrt(ex*ex + ey*ey) || 1;
+      const nx = ey / len, ny = -ex / len;
+      const cx = (a.x + c.x) * 0.5;
+      const cy = (a.y + c.y) * 0.5;
+      let inX = cx, inY = cy;
+      for (let k = 0; k < n; k++){
+        if (k === j || k === (j+1)%n) continue;
+        inX += o[k].x; inY += o[k].y;
+      }
+      inX /= (n - 1); inY /= (n - 1);
+      let sign = (nx * (inX - cx) + ny * (inY - cy)) > 0 ? 1 : -1;
+      const fx = nx * diff * sign;
+      const fy = ny * diff * sign;
+      a.x -= fx; a.y -= fy;
+      c.x -= fx; c.y -= fy;
+    }
+  }
+}
+
+// ===== DUST PARTICLES =====
+function spawnDust(x, y, count, kind){
+  count = Math.min(40, count | 0);
+  for (let i = 0; i < count; i++){
+    const ang = Math.random() * Math.PI * 2;
+    const sp = 1.2 + Math.random() * 4.5;
+    const isSpark = kind === 'hit' && Math.random() < 0.35;
+    dust.push({
+      x, y,
+      vx: Math.cos(ang) * sp,
+      vy: Math.sin(ang) * sp - (kind === 'dust' ? 1.5 : 0),
+      life: 1,
+      decay: 0.018 + Math.random() * 0.025,
+      size: isSpark ? 1.2 + Math.random() * 1.4 : 2 + Math.random() * 3.5,
+      hue: isSpark ? 25 + Math.random() * 20 : 0,
+      kind: isSpark ? 'spark' : 'puff'
+    });
+  }
+}
+
+function updateDust(dt){
+  for (let i = dust.length - 1; i >= 0; i--){
+    const d = dust[i];
+    d.x += d.vx;
+    d.y += d.vy;
+    d.vx *= 0.94;
+    d.vy *= 0.94;
+    d.vy += 0.18;
+    d.life -= d.decay;
+    if (d.life <= 0) dust.splice(i, 1);
+  }
+}
+
+// ===== SCENE SETUP =====
+function clearAll(){
+  particles.length = 0;
+  springs.length = 0;
+  bodies.length = 0;
+  dust.length = 0;
+  drag = null;
+}
+
+const jellyColors = ['#ff7849', '#ffba57', '#e84393', '#00d2c3', '#7bed9f', '#a29bfe'];
+
+function addJelly(){
+  const r = 36 + Math.random() * 20;
+  const x = 120 + Math.random() * (W - 240);
+  const y = 80 + Math.random() * 100;
+  const c = jellyColors[bodies.filter(b => b.type === 'jelly').length % jellyColors.length];
+  makeJelly(x, y, r, c);
+  spawnDust(x, y, 14, 'puff');
+}
+
+function dropRagdoll(){
+  const x = 120 + Math.random() * (W - 240);
+  makeRagdoll(x, 80);
+  spawnDust(x, 80, 10, 'puff');
+}
+
+function buildWall(){
+  // remove existing bricks
+  for (let i = bodies.length - 1; i >= 0; i--){
+    if (bodies[i].type === 'brick'){
+      const b = bodies[i];
+      b.particles.forEach(p => {
+        const pi = particles.indexOf(p);
+        if (pi >= 0) particles.splice(pi, 1);
+      });
+      bodies.splice(i, 1);
+    }
+  }
+  // also remove springs attached to brick particles
+  for (let i = springs.length - 1; i >= 0; i--){
+    if (springs[i].a.parent === null && springs[i].b.parent === null) {
+      // could be jelly anchor — keep
+    }
+  }
+  const bw = 64, bh = 28;
+  const cols = 6, rowsN = 6;
+  const totalW = cols * bw;
+  const startX = W * 0.5 - totalW * 0.5;
+  const startY = groundY - bh * 0.5 - 2;
+  for (let row = 0; row < rowsN; row++){
+    const off = (row % 2) * (bw * 0.5);
+    for (let col = 0; col < cols; col++){
+      const x = startX + col * bw + off + bw * 0.5;
+      if (x + bw * 0.5 > W - 10) continue;
+      const y = startY - row * bh;
+      const shade = 165 + Math.sin(row * 1.3 + col * 0.7) * 25;
+      const color = `hsl(218, 14%, ${shade}%)`;
+      makeBrick(x, y, bw - 4, bh - 4, color);
+    }
+  }
+}
+
+function resetAll(){
+  clearAll();
+  initialScene();
+}
+
+function initialScene(){
+  // 3 jellies
+  makeJelly(W * 0.22, H * 0.32, 42, '#ff7849');
+  makeJelly(W * 0.5, H * 0.25, 38, '#ffba57');
+  makeJelly(W * 0.78, H * 0.34, 44, '#00d2c3');
+  // ragdoll
+  makeRagdoll(W * 0.5, 70);
+  // wall
+  buildWall();
+}
+
+// ===== SIM STEP =====
+function step(dt){
+  for (let s = 0; s < SUBSTEPS; s++){
+    integrate(dt / SUBSTEPS);
+    for (let it = 0; it < CONSTRAINT_ITERS; it++){
+      // springs
+      for (let i = 0; i < springs.length; i++) springs[i].solve();
+      // pressure
+      applyPressure();
+      // collisions
+      resolveCollisions();
+      // walls/floor
+      resolveWalls();
+    }
+  }
+  updateDust(dt);
+}
+
+// ===== RENDER =====
+function drawBackground(){
+  // ambient gradient already on body — add scene-level atmospheric layers
+  // floor band
+  const fg = ctx.createLinearGradient(0, groundY - 30, 0, H);
+  fg.addColorStop(0, 'rgba(255, 186, 87, 0.0)');
+  fg.addColorStop(0.4, 'rgba(20, 26, 38, 0.6)');
+  fg.addColorStop(1, 'rgba(8, 11, 18, 0.95)');
+  ctx.fillStyle = fg;
+  ctx.fillRect(0, groundY - 30, W, H - groundY + 30);
+
+  // floor line with glow
+  const fl = ctx.createLinearGradient(0, 0, W, 0);
+  fl.addColorStop(0, 'rgba(255, 120, 73, 0)');
+  fl.addColorStop(0.5, 'rgba(255, 120, 73, 0.35)');
+  fl.addColorStop(1, 'rgba(255, 120, 73, 0)');
+  ctx.fillStyle = fl;
+  ctx.fillRect(0, groundY, W, 1);
+
+  // subtle grid
+  ctx.save();
+  ctx.globalAlpha = 0.04;
+  ctx.strokeStyle = '#ffffff';
+  ctx.lineWidth = 1;
+  const step = 60;
+  for (let x = (frameTime * 0.02) % step; x < W; x += step){
+    ctx.beginPath();
+    ctx.moveTo(x, 0); ctx.lineTo(x, groundY);
+    ctx.stroke();
+  }
+  for (let y = 0; y < groundY; y += step){
+    ctx.beginPath();
+    ctx.moveTo(0, y); ctx.lineTo(W, y);
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  // vignette
+  const v = ctx.createRadialGradient(W*0.5, H*0.5, Math.min(W, H) * 0.35, W*0.5, H*0.5, Math.max(W, H) * 0.75);
+  v.addColorStop(0, 'rgba(0,0,0,0)');
+  v.addColorStop(1, 'rgba(0,0,0,0.55)');
+  ctx.fillStyle = v;
+  ctx.fillRect(0, 0, W, H);
+}
+
+function jellyPath(body){
+  const o = body.outer;
+  const n = o.length;
+  const pts = [];
+  for (let i = 0; i < n; i++){
+    const a = o[i], b = o[(i+1)%n];
+    pts.push({ x: (a.x + b.x) * 0.5, y: (a.y + b.y) * 0.5 });
+  }
+  ctx.beginPath();
+  // Catmull-Rom-ish smooth curve through midpoints
+  const last = pts[n-1], first = pts[0];
+  ctx.moveTo((last.x + first.x)*0.5, (last.y + first.y)*0.5);
+  for (let i = 0; i < n; i++){
+    const cur = pts[i];
+    const next = pts[(i+1)%n];
+    const mx = (cur.x + next.x) * 0.5;
+    const my = (cur.y + next.y) * 0.5;
+    ctx.quadraticCurveTo(cur.x, cur.y, mx, my);
+  }
+  ctx.closePath();
+}
+
+function drawJelly(body){
+  const o = body.outer;
+  // shadow
+  ctx.save();
+  ctx.translate(4, 12);
+  jellyPath(body);
+  ctx.fillStyle = 'rgba(0,0,0,0.35)';
+  ctx.filter = 'blur(8px)';
+  ctx.fill();
+  ctx.restore();
+
+  // body
+  jellyPath(body);
+  const cx = o.reduce((s, p) => s + p.x, 0) / o.length;
+  const cy = o.reduce((s, p) => s + p.y, 0) / o.length;
+  let maxR = 0;
+  for (let i = 0; i < o.length; i++){
+    const d = Math.hypot(o[i].x - cx, o[i].y - cy);
+    if (d > maxR) maxR = d;
+  }
+  const g = ctx.createRadialGradient(cx - maxR * 0.35, cy - maxR * 0.45, 0, cx, cy, maxR * 1.3);
+  g.addColorStop(0, lightenHex(body.color, 0.35));
+  g.addColorStop(0.5, body.color);
+  g.addColorStop(1, darkenHex(body.color, 0.45));
+  ctx.fillStyle = g;
+  ctx.fill();
+
+  // glossy highlight
+  ctx.save();
+  jellyPath(body);
+  ctx.clip();
+  const hl = ctx.createRadialGradient(cx - maxR * 0.35, cy - maxR * 0.5, 0, cx - maxR * 0.35, cy - maxR * 0.5, maxR * 0.7);
+  hl.addColorStop(0, 'rgba(255,255,255,0.55)');
+  hl.addColorStop(0.4, 'rgba(255,255,255,0.15)');
+  hl.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = hl;
+  ctx.fillRect(cx - maxR, cy - maxR, maxR * 2, maxR * 2);
+  // bottom inner shadow
+  const bs = ctx.createRadialGradient(cx + maxR * 0.2, cy + maxR * 0.5, 0, cx, cy + maxR * 0.4, maxR * 1.2);
+  bs.addColorStop(0, 'rgba(0,0,0,0)');
+  bs.addColorStop(1, 'rgba(0,0,0,0.35)');
+  ctx.fillStyle = bs;
+  ctx.fillRect(cx - maxR, cy - maxR, maxR * 2, maxR * 2);
+  ctx.restore();
+
+  // rim light
+  jellyPath(body);
+  ctx.strokeStyle = lightenHex(body.color, 0.5);
+  ctx.globalAlpha = 0.4;
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+  ctx.globalAlpha = 1;
+}
+
+function drawBrick(body){
+  const p = body.particles[0];
+  const x = p.x, y = p.y;
+  const w = body.w, h = body.h;
+  const angle = Math.atan2(y - p.py, x - p.px);
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(angle);
+
+  // shadow
+  ctx.save();
+  ctx.translate(3, 6);
+  ctx.fillStyle = 'rgba(0,0,0,0.4)';
+  ctx.filter = 'blur(5px)';
+  roundRect(-w/2, -h/2, w, h, 4);
+  ctx.fill();
+  ctx.restore();
+
+  // body
+  const g = ctx.createLinearGradient(-w/2, -h/2, w/2, h/2);
+  g.addColorStop(0, lightenHex(body.color, 0.18));
+  g.addColorStop(0.5, body.color);
+  g.addColorStop(1, darkenHex(body.color, 0.3));
+  ctx.fillStyle = g;
+  roundRect(-w/2, -h/2, w, h, 4);
+  ctx.fill();
+
+  // mortar edges
+  ctx.strokeStyle = 'rgba(0,0,0,0.25)';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  // top highlight
+  ctx.fillStyle = 'rgba(255,255,255,0.12)';
+  roundRect(-w/2 + 1, -h/2 + 1, w - 2, 3, 2);
+  ctx.fill();
+
+  ctx.restore();
+}
+
+function drawRagdoll(body){
+  // shadow
+  ctx.save();
+  ctx.translate(4, 10);
+  ctx.filter = 'blur(8px)';
+  ctx.fillStyle = 'rgba(0,0,0,0.4)';
+  drawRagdollShape(body, true);
+  ctx.restore();
+
+  // actual body
+  drawRagdollShape(body, false);
+}
+
+function drawRagdollShape(body, shadow){
+  const limbs = [body.armL, body.armR, body.legL, body.legR];
+  // limbs first
+  for (const L of limbs){
+    drawCapsule(L.a.x, L.a.y, L.b.x, L.b.y, shadow ? 0 : 7, shadow ? 'rgba(0,0,0,0.4)' : '#3a4258');
+  }
+  // torso (between neck and pelvis)
+  drawTorso(body.neck.x, body.neck.y, body.pelvis.x, body.pelvis.y, shadow);
+  // head
+  if (!shadow){
+    const h = body.head;
+    const g = ctx.createRadialGradient(h.x - 5, h.y - 6, 0, h.x, h.y, 16);
+    g.addColorStop(0, '#f4d6b8');
+    g.addColorStop(1, '#c89876');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(h.x, h.y, 14, 0, Math.PI * 2);
+    ctx.fill();
+    // hair
+    ctx.fillStyle = '#2c1e16';
+    ctx.beginPath();
+    ctx.arc(h.x, h.y - 2, 14, Math.PI * 1.05, Math.PI * 1.95);
+    ctx.fill();
+    // eye
+    ctx.fillStyle = 'rgba(0,0,0,0.7)';
+    ctx.beginPath();
+    ctx.arc(h.x + 4, h.y + 1, 1.5, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+function drawCapsule(x1, y1, x2, y2, r, color){
+  const dx = x2 - x1, dy = y2 - y1;
+  const len = Math.sqrt(dx*dx + dy*dy) || 1;
+  const nx = dx / len, ny = dy / len;
+  const px = -ny, py = nx;
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.moveTo(x1 + px * r, y1 + py * r);
+  ctx.lineTo(x2 + px * r, y2 + py * r);
+  ctx.arc(x2, y2, r, Math.atan2(py, px), Math.atan2(-py, -px));
+  ctx.lineTo(x1 - px * r, y1 - py * r);
+  ctx.arc(x1, y1, r, Math.atan2(-py, -px), Math.atan2(py, px));
+  ctx.closePath();
+  ctx.fill();
+  if (color !== 'rgba(0,0,0,0.4)'){
+    // highlight
+    ctx.strokeStyle = 'rgba(255,255,255,0.12)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(x1 + px * r * 0.6, y1 + py * r * 0.6);
+    ctx.lineTo(x2 + px * r * 0.6, y2 + py * r * 0.6);
+    ctx.stroke();
+  }
+}
+
+function drawTorso(x1, y1, x2, y2, shadow){
+  const dx = x2 - x1, dy = y2 - y1;
+  const len = Math.sqrt(dx*dx + dy*dy) || 1;
+  const nx = dx / len, ny = dy / len;
+  const px = -ny, py = nx;
+  const w = 18;
+  const cx = (x1 + x2) * 0.5, cy = (y1 + y2) * 0.5;
+  ctx.save();
+  if (!shadow){
+    const g = ctx.createLinearGradient(cx + px * w, cy + py * w, cx - px * w, cy - py * w);
+    g.addColorStop(0, '#4d5476');
+    g.addColorStop(1, '#252a45');
+    ctx.fillStyle = g;
+  } else {
+    ctx.fillStyle = 'rgba(0,0,0,0.4)';
+  }
+  ctx.beginPath();
+  ctx.moveTo(x1 + px * w, y1 + py * w);
+  ctx.quadraticCurveTo(cx + px * (w + 4), cy + py * (w + 4), x2 + px * w * 0.7, y2 + py * w * 0.7);
+  ctx.lineTo(x2 - px * w * 0.7, y2 - py * w * 0.7);
+  ctx.quadraticCurveTo(cx - px * (w + 4), cy - py * (w + 4), x1 - px * w, y1 - py * w);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+}
+
+function roundRect(x, y, w, h, r){
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+}
+
+function drawDust(){
+  for (let i = 0; i < dust.length; i++){
+    const d = dust[i];
+    const a = clamp(d.life, 0, 1);
+    if (d.kind === 'spark'){
+      ctx.fillStyle = `hsla(${d.hue}, 95%, 65%, ${a})`;
+      ctx.beginPath();
+      ctx.arc(d.x, d.y, d.size * a, 0, Math.PI * 2);
+      ctx.fill();
+    } else {
+      ctx.fillStyle = `rgba(180, 190, 210, ${a * 0.55})`;
+      ctx.beginPath();
+      ctx.arc(d.x, d.y, d.size * (1.6 - a * 0.6), 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+}
+
+function drawDragIndicator(){
+  if (!drag) return;
+  const p = drag.particle;
+  ctx.save();
+  // halo
+  const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, 40);
+  g.addColorStop(0, 'rgba(255, 186, 87, 0.5)');
+  g.addColorStop(1, 'rgba(255, 186, 87, 0)');
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.arc(p.x, p.y, 40, 0, Math.PI * 2);
+  ctx.fill();
+  // line
+  ctx.strokeStyle = 'rgba(255, 186, 87, 0.6)';
+  ctx.lineWidth = 1.5;
+  ctx.setLineDash([4, 4]);
+  ctx.beginPath();
+  ctx.moveTo(p.x, p.y);
+  ctx.lineTo(mouse.x, mouse.y);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  // reticle
+  ctx.strokeStyle = 'rgba(255, 186, 87, 0.9)';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.arc(mouse.x, mouse.y, 9, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(mouse.x - 13, mouse.y); ctx.lineTo(mouse.x - 5, mouse.y);
+  ctx.moveTo(mouse.x + 5, mouse.y); ctx.lineTo(mouse.x + 13, mouse.y);
+  ctx.moveTo(mouse.x, mouse.y - 13); ctx.lineTo(mouse.x, mouse.y - 5);
+  ctx.moveTo(mouse.x, mouse.y + 5); ctx.lineTo(mouse.x, mouse.y + 13);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function render(){
+  ctx.save();
+  if (shake > 0.05){
+    const sx = (Math.random() - 0.5) * shake;
+    const sy = (Math.random() - 0.5) * shake;
+    ctx.translate(sx, sy);
+  }
+  drawBackground();
+  // draw bodies in order: bricks, ragdolls, jellies (jellies on top)
+  for (let i = 0; i < bodies.length; i++) if (bodies[i].type === 'brick' && bodies[i].alive) drawBrick(bodies[i]);
+  for (let i = 0; i < bodies.length; i++) if (bodies[i].type === 'ragdoll' && bodies[i].alive) drawRagdoll(bodies[i]);
+  for (let i = 0; i < bodies.length; i++) if (bodies[i].type === 'jelly' && bodies[i].alive) drawJelly(bodies[i]);
+  drawDust();
+  drawDragIndicator();
+  ctx.restore();
+}
+
+// ===== COLOR HELPERS =====
+function hexToRgb(h){
+  if (h.startsWith('hsl')){
+    const m = h.match(/hsl\((\d+),\s*(\d+)%,\s*(\d+)%\)/);
+    if (m){
+      return hslToRgb(+m[1], +m[2]/100, +m[3]/100);
+    }
+  }
+  let c = h.replace('#', '');
+  if (c.length === 3) c = c[0]+c[0]+c[1]+c[1]+c[2]+c[2];
+  return [parseInt(c.substr(0,2),16), parseInt(c.substr(2,2),16), parseInt(c.substr(4,2),16)];
+}
+function hslToRgb(h, s, l){
+  h /= 360;
+  let r, g, b;
+  if (s === 0){ r = g = b = l; }
+  else {
+    const hue2rgb = (p, q, t) => {
+      if (t < 0) t += 1;
+      if (t > 1) t -= 1;
+      if (t < 1/6) return p + (q - p) * 6 * t;
+      if (t < 1/2) return q;
+      if (t < 2/3) return p + (q - p) * (2/3 - t) * 6;
+      return p;
+    };
+    const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+    const p = 2 * l - q;
+    r = hue2rgb(p, q, h + 1/3);
+    g = hue2rgb(p, q, h);
+    b = hue2rgb(p, q, h - 1/3);
+  }
+  return [Math.round(r*255), Math.round(g*255), Math.round(b*255)];
+}
+function rgbToHex(r, g, b){
+  return '#' + [r,g,b].map(v => clamp(v|0,0,255).toString(16).padStart(2,'0')).join('');
+}
+function lightenHex(h, amt){
+  const [r,g,b] = hexToRgb(h);
+  return rgbToHex(r + (255-r)*amt, g + (255-g)*amt, b + (255-b)*amt);
+}
+function darkenHex(h, amt){
+  const [r,g,b] = hexToRgb(h);
+  return rgbToHex(r * (1-amt), g * (1-amt), b * (1-amt));
+}
+
+// ===== INTERACTION =====
+function pickParticle(x, y){
+  let best = null, bestD = Infinity;
+  for (let i = 0; i < particles.length; i++){
+    const p = particles[i];
+    if (!p.parent) continue; // skip anchors
+    const dx = p.x - x, dy = p.y - y;
+    const d2 = dx*dx + dy*dy;
+    const reach = (p.r + 28);
+    if (d2 < reach * reach && d2 < bestD){
+      bestD = d2;
+      best = p;
+    }
+  }
+  return best;
+}
+
+canvas.addEventListener('mousedown', e => {
+  mouse.down = true;
+  const rect = canvas.getBoundingClientRect();
+  mouse.x = e.clientX - rect.left;
+  mouse.y = e.clientY - rect.top;
+  mouse.px = mouse.x; mouse.py = mouse.y;
+  const p = pickParticle(mouse.x, mouse.y);
+  if (p){
+    drag = { particle: p, ox: p.x - mouse.x, oy: p.y - mouse.y };
+    p.dragged = true;
+  }
+});
+
+window.addEventListener('mousemove', e => {
+  const rect = canvas.getBoundingClientRect();
+  mouse.x = e.clientX - rect.left;
+  mouse.y = e.clientY - rect.top;
+});
+
+window.addEventListener('mouseup', e => {
+  mouse.down = false;
+  if (drag){
+    // throw: compute velocity from recent movement
+    const p = drag.particle;
+    p.dragged = false;
+    const vx = (mouse.x - mouse.px);
+    const vy = (mouse.y - mouse.py);
+    // apply throw velocity by adjusting prev position
+    p.px = p.x - vx * 1.4;
+    p.py = p.y - vy * 1.4;
+    drag = null;
+    // small dust at release
+    if (Math.hypot(vx, vy) > 8) spawnDust(p.x, p.y, 6, 'puff');
+  }
+});
+
+canvas.addEventListener('dblclick', e => {
+  const rect = canvas.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const y = e.clientY - rect.top;
+  if (y < groundY - 60){
+    const c = jellyColors[bodies.filter(b => b.type === 'jelly').length % jellyColors.length];
+    makeJelly(x, y, 38, c);
+    spawnDust(x, y, 16, 'puff');
+  }
+});
+
+// touch support (basic)
+canvas.addEventListener('touchstart', e => {
+  if (e.touches.length === 0) return;
+  e.preventDefault();
+  const rect = canvas.getBoundingClientRect();
+  const t = e.touches[0];
+  mouse.x = t.clientX - rect.left;
+  mouse.y = t.clientY - rect.top;
+  mouse.px = mouse.x; mouse.py = mouse.y;
+  mouse.down = true;
+  const p = pickParticle(mouse.x, mouse.y);
+  if (p){
+    drag = { particle: p, ox: p.x - mouse.x, oy: p.y - mouse.y };
+    p.dragged = true;
+  }
+}, { passive: false });
+canvas.addEventListener('touchmove', e => {
+  if (e.touches.length === 0) return;
+  e.preventDefault();
+  const rect = canvas.getBoundingClientRect();
+  const t = e.touches[0];
+  mouse.x = t.clientX - rect.left;
+  mouse.y = t.clientY - rect.top;
+}, { passive: false });
+canvas.addEventListener('touchend', e => {
+  mouse.down = false;
+  if (drag){
+    const p = drag.particle;
+    p.dragged = false;
+    const vx = (mouse.x - mouse.px);
+    const vy = (mouse.y - mouse.py);
+    p.px = p.x - vx * 1.4;
+    p.py = p.y - vy * 1.4;
+    drag = null;
+  }
+});
+
+// drag update each frame
+function updateDrag(){
+  if (drag){
+    const p = drag.particle;
+    const tx = mouse.x + drag.ox;
+    const ty = mouse.y + drag.oy;
+    // smooth target
+    p.x = tx;
+    p.y = ty;
+    p.px = p.x - (mouse.x - mouse.px) * 0.6;
+    p.py = p.y - (mouse.y - mouse.py) * 0.6;
+  }
+  // track mouse velocity
+  mouse.px = mouse.x;
+  mouse.py = mouse.y;
+}
+
+// ===== UI =====
+const gravityInput = document.getElementById('gravity');
+const gval = document.getElementById('gval');
+const fpsv = document.getElementById('fpsv');
+const bcv = document.getElementById('bcv');
+const pcv = document.getElementById('pcv');
+const ccv = document.getElementById('ccv');
+
+gravityInput.addEventListener('input', e => {
+  gravity = +e.target.value;
+  gval.textContent = gravity;
+});
+
+document.querySelectorAll('[data-action]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const a = btn.dataset.action;
+    if (a === 'jelly') addJelly();
+    else if (a === 'ragdoll') dropRagdoll();
+    else if (a === 'wall') buildWall();
+    else if (a === 'reset') resetAll();
+  });
+});
+
+// ===== MAIN LOOP =====
+let last = performance.now();
+let fpsAcc = 0, fpsCount = 0, fpsTimer = 0;
+let statTimer = 0;
+
+function loop(now){
+  let dt = (now - last) / 1000;
+  last = now;
+  if (dt > 0.05) dt = 0.05;
+  frameTime += dt;
+
+  // dynamic ground based on resize
+  groundY = H * FLOOR_Y_RATIO;
+
+  // ensure grid is sized
+  buildGrid();
+
+  updateDrag();
+  step(dt);
+
+  if (shake > 0){
+    shake *= 0.86;
+    if (shake < 0.05) shake = 0;
+  }
+
+  render();
+
+  // fps
+  fpsAcc += dt; fpsCount++;
+  statTimer += dt;
+  if (statTimer > 0.3){
+    const fps = fpsCount / fpsAcc;
+    fpsv.textContent = fps.toFixed(0);
+    fpsv.className = 'v' + (fps < 45 ? ' warn' : '');
+    bcv.textContent = bodies.length;
+    pcv.textContent = particles.length;
+    ccv.textContent = springs.length;
+    fpsAcc = 0; fpsCount = 0; statTimer = 0;
+  }
+
+  requestAnimationFrame(loop);
+}
+
+window.addEventListener('resize', () => {
+  resize();
+  groundY = H * FLOOR_Y_RATIO;
+});
+
+// boot
+groundY = H * FLOOR_Y_RATIO;
+initialScene();
+requestAnimationFrame(loop);
+
+// hide loader
+setTimeout(() => {
+  document.getElementById('loader').classList.add('gone');
+  setTimeout(() => document.getElementById('loader').remove(), 700);
+}, 300);
+</script>
+</body>
+</html>

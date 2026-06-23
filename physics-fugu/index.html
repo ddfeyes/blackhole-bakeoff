@@ -1,0 +1,1289 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
+<title>Handmade 2D Physics Playground</title>
+<style>
+  :root{
+    --panel: rgba(12,16,31,.72);
+    --panel2: rgba(255,255,255,.08);
+    --line: rgba(255,255,255,.14);
+    --text: #edf3ff;
+    --muted: #9aa8c7;
+    --accent: #78f3ff;
+    --accent2:#9a7cff;
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:#070b17;font-family:Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif;color:var(--text);}
+  canvas{display:block;width:100vw;height:100vh;cursor:grab;}
+  canvas:active{cursor:grabbing;}
+  .panel{
+    position:fixed;left:22px;top:22px;width:318px;box-sizing:border-box;
+    padding:18px;border:1px solid var(--line);border-radius:22px;
+    background:linear-gradient(180deg,rgba(20,27,50,.82),rgba(8,12,24,.66));
+    box-shadow:0 24px 70px rgba(0,0,0,.42), inset 0 1px 0 rgba(255,255,255,.12);
+    backdrop-filter: blur(18px) saturate(135%);
+    user-select:none;
+  }
+  .title{display:flex;align-items:center;gap:10px;font-weight:800;letter-spacing:.2px;font-size:17px;margin-bottom:4px}
+  .orb{width:13px;height:13px;border-radius:50%;background:radial-gradient(circle at 30% 25%,#fff,#77f4ff 35%,#725cff 80%);box-shadow:0 0 22px #78f3ff}
+  .sub{font-size:12px;color:var(--muted);margin-bottom:16px}
+  .row{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:10px 0 7px}
+  .label{font-size:12px;font-weight:700;color:#c8d4ef;text-transform:uppercase;letter-spacing:.09em}
+  .value{font-size:12px;color:#87f5ff;font-weight:800}
+  input[type=range]{
+    -webkit-appearance:none;appearance:none;width:100%;height:24px;background:transparent;outline:none;margin:0 0 14px;
+  }
+  input[type=range]::-webkit-slider-runnable-track{
+    height:9px;border-radius:999px;background:
+      linear-gradient(90deg,var(--accent),var(--accent2));
+    box-shadow:inset 0 1px 2px rgba(0,0,0,.38),0 0 0 1px rgba(255,255,255,.08);
+  }
+  input[type=range]::-moz-range-track{
+    height:9px;border-radius:999px;background:linear-gradient(90deg,var(--accent),var(--accent2));
+  }
+  input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none;appearance:none;margin-top:-7px;width:23px;height:23px;border-radius:50%;
+    border:2px solid rgba(255,255,255,.9);
+    background:radial-gradient(circle at 35% 28%,#fff,#9ff8ff 42%,#725cff);
+    box-shadow:0 8px 22px rgba(83,203,255,.35);
+  }
+  input[type=range]::-moz-range-thumb{
+    width:23px;height:23px;border-radius:50%;border:2px solid rgba(255,255,255,.9);
+    background:radial-gradient(circle at 35% 28%,#fff,#9ff8ff 42%,#725cff);
+  }
+  .buttons{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:6px}
+  button{
+    border:1px solid rgba(255,255,255,.13);border-radius:14px;padding:11px 10px;
+    color:#f3f7ff;font-weight:800;font-size:12px;letter-spacing:.01em;
+    background:linear-gradient(180deg,rgba(255,255,255,.13),rgba(255,255,255,.055));
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.16),0 10px 22px rgba(0,0,0,.18);
+    cursor:pointer;transition:transform .12s ease, border-color .12s ease, background .12s ease;
+  }
+  button:hover{transform:translateY(-1px);border-color:rgba(120,243,255,.42);background:linear-gradient(180deg,rgba(120,243,255,.18),rgba(154,124,255,.08))}
+  button:active{transform:translateY(1px) scale(.99)}
+  .stats{
+    display:flex;justify-content:space-between;align-items:center;margin-top:14px;padding:12px 13px;
+    border-radius:16px;background:rgba(255,255,255,.065);border:1px solid rgba(255,255,255,.09);
+    font-variant-numeric:tabular-nums;
+  }
+  .stat strong{display:block;font-size:15px}.stat span{display:block;font-size:10px;color:var(--muted);text-transform:uppercase;font-weight:800;letter-spacing:.08em}
+  .hint{position:fixed;right:22px;bottom:18px;color:rgba(225,236,255,.56);font-size:12px;text-shadow:0 2px 12px rgba(0,0,0,.6);user-select:none}
+</style>
+</head>
+<body>
+<canvas id="world"></canvas>
+
+<div class="panel">
+  <div class="title"><span class="orb"></span> Handmade Physics Lab</div>
+  <div class="sub">Drag any jelly, limb, or brick. Release to throw.</div>
+
+  <div class="row"><div class="label">Gravity</div><div class="value" id="gVal">900</div></div>
+  <input id="gravity" type="range" min="0" max="1700" value="900" step="10" />
+
+  <div class="buttons">
+    <button id="addJelly">Add jelly</button>
+    <button id="dropRag">Drop ragdoll</button>
+    <button id="rebuild">Rebuild wall</button>
+    <button id="reset">Reset</button>
+  </div>
+
+  <div class="stats">
+    <div class="stat"><strong id="fps">60</strong><span>FPS</span></div>
+    <div class="stat"><strong id="bodies">0</strong><span>Bodies</span></div>
+    <div class="stat"><strong id="parts">0</strong><span>Particles</span></div>
+  </div>
+</div>
+<div class="hint">100% custom physics: integrator, constraints, collision detection + response.</div>
+
+<script>
+(() => {
+'use strict';
+
+const canvas = document.getElementById('world');
+const ctx = canvas.getContext('2d', { alpha:false });
+
+let W = 1280, H = 720, DPR = 1;
+let bounds = { left:50, right:1230, ceiling:58, floor:650 };
+let gravity = 900;
+
+const fixedDt = 1/60;
+const SUBSTEPS = 3;
+const ITERS = 9;
+const MAX_V = 2550;
+const MAX_W = 34;
+
+let particles = [];
+let softBodies = [];
+let rigids = [];
+let joints = [];
+let angleLimits = [];
+let dust = [];
+let ragId = 0;
+let blobId = 0;
+let simTime = 0;
+let shake = 0;
+let lastDustTime = -99;
+let accumulator = 0;
+let fpsEMA = 60;
+let lastRAF = performance.now();
+
+const mouse = { x:0, y:0, px:0, py:0, vx:0, vy:0, down:false, lastT:0 };
+let grab = null;
+
+const gInput = document.getElementById('gravity');
+const gVal = document.getElementById('gVal');
+const fpsEl = document.getElementById('fps');
+const bodiesEl = document.getElementById('bodies');
+const partsEl = document.getElementById('parts');
+
+const clamp = (v,a,b)=> v<a?a:v>b?b:v;
+const hypot = Math.hypot;
+const dot = (ax,ay,bx,by)=> ax*bx + ay*by;
+const cross = (ax,ay,bx,by)=> ax*by - ay*bx;
+const normAng = a => {
+  while(a > Math.PI) a -= Math.PI*2;
+  while(a < -Math.PI) a += Math.PI*2;
+  return a;
+};
+const shade = (hex, amt) => {
+  hex = hex.replace('#','');
+  let r=parseInt(hex.slice(0,2),16), g=parseInt(hex.slice(2,4),16), b=parseInt(hex.slice(4,6),16);
+  r=clamp(Math.round(r + (amt>0 ? (255-r)*amt : r*amt)),0,255);
+  g=clamp(Math.round(g + (amt>0 ? (255-g)*amt : g*amt)),0,255);
+  b=clamp(Math.round(b + (amt>0 ? (255-b)*amt : b*amt)),0,255);
+  return `rgb(${r},${g},${b})`;
+};
+const rgba = (hex,a) => {
+  hex = hex.replace('#','');
+  return `rgba(${parseInt(hex.slice(0,2),16)},${parseInt(hex.slice(2,4),16)},${parseInt(hex.slice(4,6),16)},${a})`;
+};
+
+class Particle {
+  constructor(x,y,mass,r,blob,collide=true){
+    this.x=x; this.y=y; this.px=x; this.py=y;
+    this.vx=0; this.vy=0;
+    this.mass=mass; this.inv=mass>0 ? 1/mass : 0;
+    this.r=r; this.blob=blob; this.collide=collide;
+    this.onGround=false;
+  }
+}
+
+class SoftBlob {
+  constructor(cx,cy,R,color){
+    this.id = ++blobId;
+    this.cx = cx; this.cy = cy; this.R = R; this.color=color;
+    this.ring = [];
+    this.particles = [];
+    this.springs = [];
+    this.e = .13;
+    const n = 18;
+    const pm = Math.max(.28, R/122);
+    const pr = Math.max(8.5, R*.245);
+
+    for(let i=0;i<n;i++){
+      const a = i/n * Math.PI*2;
+      const p = new Particle(cx+Math.cos(a)*R, cy+Math.sin(a)*R, pm, pr, this, true);
+      this.ring.push(p); this.particles.push(p); particles.push(p);
+    }
+    this.center = new Particle(cx,cy,Math.max(1.1,R/42), R*.13, this, false);
+    this.particles.push(this.center); particles.push(this.center);
+
+    const addSpring = (a,b,stiff=.72) => {
+      const dx=b.x-a.x, dy=b.y-a.y;
+      this.springs.push({a,b,rest:hypot(dx,dy),stiff});
+    };
+    for(let i=0;i<n;i++){
+      addSpring(this.ring[i], this.ring[(i+1)%n], .84);
+      addSpring(this.ring[i], this.ring[(i+2)%n], .32);
+      addSpring(this.ring[i], this.center, .54);
+    }
+    for(let i=0;i<n/2;i++) addSpring(this.ring[i], this.ring[(i+n/2)%n], .08);
+
+    this.area0 = polygonArea(this.ring);
+    softBodies.push(this);
+  }
+
+  solve(){
+    for(const s of this.springs) solveSpring(s.a,s.b,s.rest,s.stiff);
+    solveArea(this);
+  }
+
+  centroid(){
+    let x=0,y=0;
+    for(const p of this.ring){ x+=p.x; y+=p.y; }
+    return {x:x/this.ring.length, y:y/this.ring.length};
+  }
+}
+
+class Rigid {
+  constructor(x,y,w,h,mass,kind,color,angle=0){
+    this.x=x; this.y=y; this.px=x; this.py=y;
+    this.a=angle; this.pa=angle;
+    this.vx=0; this.vy=0; this.angVel=0;
+    this.w=w; this.h=h; this.hw=w/2; this.hh=h/2;
+    this.mass=mass; this.invMass=mass>0 ? 1/mass : 0;
+    const I = mass*(w*w+h*h)/12;
+    this.invI = mass>0 ? 1/I : 0;
+    this.kind=kind; this.color=color;
+    this.radius = Math.sqrt(this.hw*this.hw + this.hh*this.hh);
+    this.group = null;
+    this.contacting=false;
+    this.seed = Math.random()*9999;
+    this.chips = [];
+    if(kind === 'brick'){
+      for(let i=0;i<5;i++){
+        this.chips.push({
+          x:(Math.random()-.5)*w*.72,
+          y:(Math.random()-.5)*h*.55,
+          l:5+Math.random()*13,
+          a:(Math.random()-.5)*.9
+        });
+      }
+    }
+    rigids.push(this);
+  }
+}
+
+class Joint {
+  constructor(a,lax,lay,b,lbx,lby,stiff=.72){
+    this.a=a; this.b=b; this.lax=lax; this.lay=lay; this.lbx=lbx; this.lby=lby; this.stiff=stiff;
+  }
+}
+
+class AngleLimit {
+  constructor(parent,child,rest,minOff,maxOff,stiff=.34){
+    this.p=parent; this.c=child; this.rest=rest; this.min=minOff; this.max=maxOff; this.stiff=stiff;
+  }
+}
+
+function polygonArea(pts){
+  let a=0, n=pts.length;
+  for(let i=0;i<n;i++){
+    const p=pts[i], q=pts[(i+1)%n];
+    a += p.x*q.y - p.y*q.x;
+  }
+  return a*.5;
+}
+
+function resize(){
+  DPR = Math.min(2, Math.max(1, window.devicePixelRatio || 1));
+  W = innerWidth; H = innerHeight;
+  canvas.width = Math.floor(W*DPR);
+  canvas.height = Math.floor(H*DPR);
+  canvas.style.width = W+'px';
+  canvas.style.height = H+'px';
+  bounds.left = 48;
+  bounds.right = W - 48;
+  bounds.ceiling = 56;
+  bounds.floor = H - 72;
+}
+addEventListener('resize', resize);
+
+function worldPoint(b,lx,ly){
+  const c=Math.cos(b.a), s=Math.sin(b.a);
+  return { x:b.x + c*lx - s*ly, y:b.y + s*lx + c*ly };
+}
+function localPoint(b,x,y){
+  const c=Math.cos(b.a), s=Math.sin(b.a);
+  const dx=x-b.x, dy=y-b.y;
+  return { x:c*dx + s*dy, y:-s*dx + c*dy };
+}
+function getVerts(b){
+  const c=Math.cos(b.a), s=Math.sin(b.a);
+  const ux={x:c,y:s}, uy={x:-s,y:c};
+  return [
+    {x:b.x-ux.x*b.hw-uy.x*b.hh, y:b.y-ux.y*b.hw-uy.y*b.hh},
+    {x:b.x+ux.x*b.hw-uy.x*b.hh, y:b.y+ux.y*b.hw-uy.y*b.hh},
+    {x:b.x+ux.x*b.hw+uy.x*b.hh, y:b.y+ux.y*b.hw+uy.y*b.hh},
+    {x:b.x-ux.x*b.hw+uy.x*b.hh, y:b.y-ux.y*b.hw+uy.y*b.hh}
+  ];
+}
+function bodyAxes(b){
+  const c=Math.cos(b.a), s=Math.sin(b.a);
+  return [{x:c,y:s},{x:-s,y:c}];
+}
+function pointInBody(x,y,b,eps=0){
+  const p=localPoint(b,x,y);
+  return Math.abs(p.x) <= b.hw+eps && Math.abs(p.y) <= b.hh+eps;
+}
+
+function applyPosImpulse(b, px,py, ix,iy){
+  if(!b.invMass) return;
+  const rx=px-b.x, ry=py-b.y;
+  b.x += ix*b.invMass;
+  b.y += iy*b.invMass;
+  b.a += b.invI * cross(rx,ry,ix,iy);
+}
+function applyVelImpulse(b, px,py, ix,iy){
+  if(!b.invMass) return;
+  const rx=px-b.x, ry=py-b.y;
+  b.vx += ix*b.invMass;
+  b.vy += iy*b.invMass;
+  b.angVel += b.invI * cross(rx,ry,ix,iy);
+}
+function pointVel(b, px,py){
+  const rx=px-b.x, ry=py-b.y;
+  return { x:b.vx - b.angVel*ry, y:b.vy + b.angVel*rx };
+}
+
+function solveSpring(a,b,rest,stiff){
+  const dx=b.x-a.x, dy=b.y-a.y;
+  const d=hypot(dx,dy);
+  if(d < 1e-6) return;
+  const w=a.inv+b.inv; if(!w) return;
+  const c = (d-rest) * stiff / (w*d);
+  a.x += dx * c * a.inv; a.y += dy * c * a.inv;
+  b.x -= dx * c * b.inv; b.y -= dy * c * b.inv;
+}
+
+function solveArea(blob){
+  const pts=blob.ring, n=pts.length;
+  const area = polygonArea(pts);
+  const C = area - blob.area0;
+  let sum=0;
+  const grads = [];
+  for(let i=0;i<n;i++){
+    const prev=pts[(i+n-1)%n], next=pts[(i+1)%n];
+    const gx=(next.y-prev.y)*.5;
+    const gy=(prev.x-next.x)*.5;
+    grads[i]={x:gx,y:gy};
+    sum += pts[i].inv * (gx*gx+gy*gy);
+  }
+  if(sum < 1e-8) return;
+  const lambda = clamp(-C/sum, -1.9, 1.9) * .58;
+  for(let i=0;i<n;i++){
+    const p=pts[i], g=grads[i];
+    p.x += p.inv * lambda * g.x;
+    p.y += p.inv * lambda * g.y;
+  }
+}
+
+function projectBody(b, ax,ay){
+  const axes=bodyAxes(b);
+  const center = dot(b.x,b.y,ax,ay);
+  const r = b.hw*Math.abs(dot(axes[0].x,axes[0].y,ax,ay)) + b.hh*Math.abs(dot(axes[1].x,axes[1].y,ax,ay));
+  return {min:center-r, max:center+r};
+}
+
+function sat(A,B){
+  if(Math.abs(A.x-B.x) > A.radius+B.radius+4 || Math.abs(A.y-B.y) > A.radius+B.radius+4) return null;
+  const axes=[...bodyAxes(A), ...bodyAxes(B)];
+  let bestOverlap=Infinity, nx=0, ny=0;
+  for(const ax0 of axes){
+    let ax=ax0.x, ay=ax0.y;
+    const pa=projectBody(A,ax,ay), pb=projectBody(B,ax,ay);
+    const o = Math.min(pa.max,pb.max) - Math.max(pa.min,pb.min);
+    if(o <= 0) return null;
+    if(o < bestOverlap){
+      bestOverlap=o; nx=ax; ny=ay;
+      if(dot(B.x-A.x,B.y-A.y,nx,ny) < 0){ nx=-nx; ny=-ny; }
+    }
+  }
+  return {nx,ny,pen:bestOverlap};
+}
+
+function contactPoints(A,B,nx,ny){
+  const av=getVerts(A), bv=getVerts(B);
+  let pts=[];
+  for(const p of av) if(pointInBody(p.x,p.y,B,1.2)) pts.push(p);
+  for(const p of bv) if(pointInBody(p.x,p.y,A,1.2)) pts.push(p);
+
+  const unique=[];
+  for(const p of pts){
+    if(!unique.some(q=>hypot(p.x-q.x,p.y-q.y)<2.2)) unique.push(p);
+  }
+  pts=unique;
+  if(!pts.length) pts=[{x:(A.x+B.x)*.5, y:(A.y+B.y)*.5}];
+
+  if(pts.length > 2){
+    const tx=-ny, ty=nx;
+    let minP=pts[0], maxP=pts[0], min=dot(pts[0].x,pts[0].y,tx,ty), max=min;
+    for(const p of pts){
+      const v=dot(p.x,p.y,tx,ty);
+      if(v<min){min=v;minP=p}
+      if(v>max){max=v;maxP=p}
+    }
+    pts=[minP,maxP];
+  }
+  return pts;
+}
+
+function solveRigidRigid(A,B,iter){
+  if(A.group && A.group === B.group) return;
+  const m=sat(A,B); if(!m) return;
+  const pts=contactPoints(A,B,m.nx,m.ny);
+  A.contacting=B.contacting=true;
+
+  if(iter===0){
+    for(const p of pts){
+      const va=pointVel(A,p.x,p.y), vb=pointVel(B,p.x,p.y);
+      const closing = -dot(vb.x-va.x, vb.y-va.y, m.nx,m.ny);
+      if(closing > 260) impactAt(p.x,p.y,m.nx,m.ny,closing);
+    }
+  }
+
+  const amount = Math.max(0,m.pen-.025) * .76 / pts.length;
+  if(amount <= 0) return;
+  for(const p of pts){
+    const raX=p.x-A.x, raY=p.y-A.y, rbX=p.x-B.x, rbY=p.y-B.y;
+    const ca=cross(raX,raY,m.nx,m.ny), cb=cross(rbX,rbY,m.nx,m.ny);
+    const w=A.invMass+B.invMass + A.invI*ca*ca + B.invI*cb*cb;
+    if(w < 1e-9) continue;
+    const lam=amount/w;
+    const ix=m.nx*lam, iy=m.ny*lam;
+    applyPosImpulse(A,p.x,p.y,-ix,-iy);
+    applyPosImpulse(B,p.x,p.y, ix, iy);
+  }
+}
+
+function solveBodyPlane(b,nx,ny,pen,px,py,stiff=.62){
+  if(pen <= 0) return;
+  b.contacting=true;
+  const amount = Math.max(0,pen-.02)*stiff;
+  const rX=px-b.x, rY=py-b.y;
+  const c=cross(rX,rY,nx,ny);
+  const w=b.invMass + b.invI*c*c;
+  if(w < 1e-9) return;
+  const lam=amount/w;
+  applyPosImpulse(b,px,py,nx*lam,ny*lam);
+}
+
+function solveRigidBounds(b,iter){
+  const vs=getVerts(b);
+  for(const p of vs){
+    if(p.y > bounds.floor){
+      if(iter===0){
+        const v=pointVel(b,p.x,p.y), closing=-dot(v.x,v.y,0,-1);
+        if(closing>330) impactAt(p.x,bounds.floor,0,-1,closing);
+      }
+      solveBodyPlane(b,0,-1,p.y-bounds.floor,p.x,p.y,.68);
+    }
+    if(p.y < bounds.ceiling) solveBodyPlane(b,0,1,bounds.ceiling-p.y,p.x,p.y,.5);
+    if(p.x < bounds.left) solveBodyPlane(b,1,0,bounds.left-p.x,p.x,p.y,.65);
+    if(p.x > bounds.right) solveBodyPlane(b,-1,0,p.x-bounds.right,p.x,p.y,.65);
+  }
+}
+
+function particleBounds(p,iter){
+  let hit=false, nx=0, ny=0, speed=0, ix=p.x, iy=p.y;
+  if(p.y+p.r > bounds.floor){
+    speed = Math.max(speed, p.vy);
+    p.y -= (p.y+p.r-bounds.floor)*.9; p.onGround=true; hit=true; nx=0; ny=-1; iy=bounds.floor;
+  }
+  if(p.y-p.r < bounds.ceiling){ p.y += (bounds.ceiling-(p.y-p.r))*.85; hit=true; nx=0; ny=1; }
+  if(p.x-p.r < bounds.left){ p.x += (bounds.left-(p.x-p.r))*.85; hit=true; nx=1; ny=0; ix=bounds.left; }
+  if(p.x+p.r > bounds.right){ p.x -= (p.x+p.r-bounds.right)*.85; hit=true; nx=-1; ny=0; ix=bounds.right; }
+  if(hit && iter===0 && speed>360) impactAt(ix,iy,nx,ny,speed*.85);
+}
+
+function solveParticleParticle(a,b,iter){
+  if(a.blob && a.blob === b.blob) return;
+  const dx=b.x-a.x, dy=b.y-a.y;
+  const rr=a.r+b.r, d2=dx*dx+dy*dy;
+  if(d2 >= rr*rr || d2 < 1e-9) return;
+  const d=Math.sqrt(d2), nx=dx/d, ny=dy/d;
+  const pen=rr-d, w=a.inv+b.inv; if(!w) return;
+
+  if(iter===0){
+    const closing = -dot(b.vx-a.vx,b.vy-a.vy,nx,ny);
+    if(closing>300) impactAt((a.x+b.x)*.5,(a.y+b.y)*.5,nx,ny,closing*.8);
+  }
+
+  const lam=Math.max(0,pen-.05)*.72/w;
+  a.x -= nx*lam*a.inv; a.y -= ny*lam*a.inv;
+  b.x += nx*lam*b.inv; b.y += ny*lam*b.inv;
+}
+
+function particleRigidInfo(p,b,margin=0){
+  const lp=localPoint(b,p.x,p.y);
+  const cx=clamp(lp.x,-b.hw,b.hw), cy=clamp(lp.y,-b.hh,b.hh);
+  let nx,ny,pen, wx,wy;
+  const c=Math.cos(b.a), s=Math.sin(b.a);
+  const inside = Math.abs(lp.x)<=b.hw && Math.abs(lp.y)<=b.hh;
+  if(inside){
+    const dx=b.hw-Math.abs(lp.x), dy=b.hh-Math.abs(lp.y);
+    if(dx < dy){
+      const sx=lp.x>=0 ? 1 : -1;
+      nx=c*sx; ny=s*sx; pen=p.r+dx;
+      wx=b.x + c*(sx*b.hw) - s*lp.y;
+      wy=b.y + s*(sx*b.hw) + c*lp.y;
+    }else{
+      const sy=lp.y>=0 ? 1 : -1;
+      nx=-s*sy; ny=c*sy; pen=p.r+dy;
+      wx=b.x + c*lp.x - s*(sy*b.hh);
+      wy=b.y + s*lp.x + c*(sy*b.hh);
+    }
+  }else{
+    wx=b.x + c*cx - s*cy;
+    wy=b.y + s*cx + c*cy;
+    const dx=p.x-wx, dy=p.y-wy;
+    const d=hypot(dx,dy);
+    if(d > p.r+margin || d < 1e-9) return null;
+    nx=dx/d; ny=dy/d; pen=p.r-d;
+  }
+  return {nx,ny,pen,px:wx,py:wy};
+}
+
+function solveParticleRigid(p,b,iter){
+  if(!p.collide) return;
+  if(Math.abs(p.x-b.x) > p.r+b.radius+3 || Math.abs(p.y-b.y) > p.r+b.radius+3) return;
+  const info=particleRigidInfo(p,b,0);
+  if(!info || info.pen <= 0) return;
+  b.contacting=true;
+
+  if(iter===0){
+    const vb=pointVel(b,info.px,info.py);
+    const closing = -dot(p.vx-vb.x,p.vy-vb.y,info.nx,info.ny);
+    if(closing>280) impactAt(info.px,info.py,info.nx,info.ny,closing);
+  }
+
+  const rx=info.px-b.x, ry=info.py-b.y;
+  const c=cross(rx,ry,info.nx,info.ny);
+  const w=p.inv + b.invMass + b.invI*c*c;
+  if(w < 1e-9) return;
+  const lam=Math.max(0,info.pen-.035)*.72/w;
+  const ix=info.nx*lam, iy=info.ny*lam;
+  p.x += ix*p.inv; p.y += iy*p.inv;
+  applyPosImpulse(b,info.px,info.py,-ix,-iy);
+}
+
+function solveJoint(j){
+  const A=j.a, B=j.b;
+  const pa=worldPoint(A,j.lax,j.lay), pb=worldPoint(B,j.lbx,j.lby);
+  let dx=pb.x-pa.x, dy=pb.y-pa.y;
+  let d=hypot(dx,dy);
+  if(d < 1e-6) return;
+  const nx=dx/d, ny=dy/d;
+  d = Math.min(d, 65);
+  const raX=pa.x-A.x, raY=pa.y-A.y, rbX=pb.x-B.x, rbY=pb.y-B.y;
+  const ca=cross(raX,raY,nx,ny), cb=cross(rbX,rbY,nx,ny);
+  const w=A.invMass+B.invMass + A.invI*ca*ca + B.invI*cb*cb;
+  if(w < 1e-9) return;
+  const lam=d*j.stiff/w;
+  applyPosImpulse(A,pa.x,pa.y,nx*lam,ny*lam);
+  applyPosImpulse(B,pb.x,pb.y,-nx*lam,-ny*lam);
+}
+
+function solveAngleLimit(lim){
+  const rel=normAng(lim.c.a - lim.p.a - lim.rest);
+  let C=0;
+  if(rel < lim.min) C=rel-lim.min;
+  else if(rel > lim.max) C=rel-lim.max;
+  else return;
+  const w=lim.p.invI + lim.c.invI;
+  if(w < 1e-9) return;
+  const corr = C * lim.stiff / w;
+  lim.p.a += lim.p.invI * corr;
+  lim.c.a -= lim.c.invI * corr;
+}
+
+function solveGrab(){
+  if(!grab) return;
+  if(grab.type === 'rigid'){
+    const b=grab.body;
+    const p=worldPoint(b,grab.lx,grab.ly);
+    let dx=mouse.x-p.x, dy=mouse.y-p.y;
+    let d=hypot(dx,dy); if(d < 1e-6) return;
+    const nx=dx/d, ny=dy/d;
+    d=Math.min(d,75);
+    const rx=p.x-b.x, ry=p.y-b.y;
+    const c=cross(rx,ry,nx,ny);
+    const w=b.invMass + b.invI*c*c;
+    if(w < 1e-9) return;
+    const lam=d*.86/w;
+    applyPosImpulse(b,p.x,p.y,nx*lam,ny*lam);
+  } else if(grab.type === 'soft'){
+    for(const g of grab.items){
+      const p=g.p;
+      let tx=mouse.x+g.ox, ty=mouse.y+g.oy;
+      let dx=tx-p.x, dy=ty-p.y, d=hypot(dx,dy);
+      if(d > 80){ dx*=80/d; dy*=80/d; }
+      p.x += dx * g.w * .30;
+      p.y += dy * g.w * .30;
+    }
+  }
+}
+
+function preStep(dt){
+  for(const b of rigids) b.contacting=false;
+  for(const p of particles){
+    p.onGround=false;
+    p.px=p.x; p.py=p.y;
+    p.vy += gravity*dt;
+    const sp=hypot(p.vx,p.vy);
+    if(sp>MAX_V){ p.vx*=MAX_V/sp; p.vy*=MAX_V/sp; }
+    p.x += p.vx*dt; p.y += p.vy*dt;
+  }
+  for(const b of rigids){
+    b.px=b.x; b.py=b.y; b.pa=b.a;
+    b.vy += gravity*dt;
+    const sp=hypot(b.vx,b.vy);
+    if(sp>MAX_V){ b.vx*=MAX_V/sp; b.vy*=MAX_V/sp; }
+    b.angVel=clamp(b.angVel,-MAX_W,MAX_W);
+    b.x += b.vx*dt; b.y += b.vy*dt; b.a += b.angVel*dt;
+    if(b.a > Math.PI*8 || b.a < -Math.PI*8) b.a = normAng(b.a);
+  }
+}
+
+function solvePositions(iter){
+  solveGrab();
+
+  for(const blob of softBodies) blob.solve();
+  for(const j of joints) solveJoint(j);
+  for(const lim of angleLimits) solveAngleLimit(lim);
+
+  for(const p of particles) if(p.collide) particleBounds(p,iter);
+  for(const b of rigids) solveRigidBounds(b,iter);
+
+  const colliders=particles.filter(p=>p.collide);
+  for(let i=0;i<colliders.length;i++){
+    for(let j=i+1;j<colliders.length;j++) solveParticleParticle(colliders[i],colliders[j],iter);
+  }
+  for(const p of colliders){
+    for(const b of rigids) solveParticleRigid(p,b,iter);
+  }
+  for(let i=0;i<rigids.length;i++){
+    for(let j=i+1;j<rigids.length;j++) solveRigidRigid(rigids[i],rigids[j],iter);
+  }
+}
+
+function updateVelocities(dt){
+  for(const p of particles){
+    p.vx = (p.x-p.px)/dt;
+    p.vy = (p.y-p.py)/dt;
+    p.vx *= .998; p.vy *= .998;
+    if(p.onGround){ p.vx *= .86; if(Math.abs(p.vy)<18) p.vy=0; }
+    const sp=hypot(p.vx,p.vy);
+    if(sp>MAX_V){ p.vx*=MAX_V/sp; p.vy*=MAX_V/sp; }
+  }
+  for(const b of rigids){
+    b.vx = (b.x-b.px)/dt;
+    b.vy = (b.y-b.py)/dt;
+    b.angVel = normAng(b.a-b.pa)/dt;
+    const linD = b.kind==='brick' ? .996 : .994;
+    b.vx *= linD; b.vy *= .998;
+    b.angVel *= b.kind==='brick' ? .985 : .988;
+    if(b.contacting){
+      b.vx *= .992; b.angVel *= .993;
+      if(b.kind==='brick' && hypot(b.vx,b.vy)<2.2 && Math.abs(b.angVel)<.055){
+        b.vx=0; b.vy=0; b.angVel=0;
+      }
+    }
+    const sp=hypot(b.vx,b.vy);
+    if(sp>MAX_V){ b.vx*=MAX_V/sp; b.vy*=MAX_V/sp; }
+    b.angVel=clamp(b.angVel,-MAX_W,MAX_W);
+  }
+}
+
+function velocityRigidRigid(A,B,nx,ny,px,py,mu=.62,e=.04){
+  const raX=px-A.x, raY=py-A.y, rbX=px-B.x, rbY=py-B.y;
+  const ca=cross(raX,raY,nx,ny), cb=cross(rbX,rbY,nx,ny);
+  let w=A.invMass+B.invMass+A.invI*ca*ca+B.invI*cb*cb;
+  if(w < 1e-9) return;
+  let va=pointVel(A,px,py), vb=pointVel(B,px,py);
+  let rvx=vb.x-va.x, rvy=vb.y-va.y;
+  const vn=dot(rvx,rvy,nx,ny);
+  let j=0;
+  if(vn < .4){
+    j=-(1+e)*vn/w;
+    if(j>0){
+      applyVelImpulse(A,px,py,-nx*j,-ny*j);
+      applyVelImpulse(B,px,py, nx*j, ny*j);
+    }
+  }
+  const tx=-ny, ty=nx;
+  va=pointVel(A,px,py); vb=pointVel(B,px,py);
+  rvx=vb.x-va.x; rvy=vb.y-va.y;
+  const vt=dot(rvx,rvy,tx,ty);
+  const cat=cross(raX,raY,tx,ty), cbt=cross(rbX,rbY,tx,ty);
+  w=A.invMass+B.invMass+A.invI*cat*cat+B.invI*cbt*cbt;
+  if(w < 1e-9) return;
+  let jt=-vt/w;
+  jt=clamp(jt,-mu*(j+7),mu*(j+7));
+  applyVelImpulse(A,px,py,-tx*jt,-ty*jt);
+  applyVelImpulse(B,px,py, tx*jt, ty*jt);
+}
+
+function velocityBodyPlane(b,nx,ny,px,py,mu=.82,e=.02){
+  const v=pointVel(b,px,py);
+  const vn=dot(v.x,v.y,nx,ny);
+  const rx=px-b.x, ry=py-b.y;
+  const cn=cross(rx,ry,nx,ny);
+  let w=b.invMass+b.invI*cn*cn;
+  if(w < 1e-9) return;
+  let j=0;
+  if(vn < .8){
+    j=-(1+e)*vn/w;
+    if(j>0) applyVelImpulse(b,px,py,nx*j,ny*j);
+  }
+  const tx=-ny, ty=nx;
+  const v2=pointVel(b,px,py);
+  const vt=dot(v2.x,v2.y,tx,ty);
+  const ct=cross(rx,ry,tx,ty);
+  w=b.invMass+b.invI*ct*ct;
+  if(w < 1e-9) return;
+  let jt=-vt/w;
+  jt=clamp(jt,-mu*(j+9),mu*(j+9));
+  applyVelImpulse(b,px,py,tx*jt,ty*jt);
+}
+
+function velocityParticleRigid(p,b,nx,ny,px,py,mu=.45,e=.05){
+  const vb=pointVel(b,px,py);
+  let rvx=p.vx-vb.x, rvy=p.vy-vb.y;
+  const rx=px-b.x, ry=py-b.y;
+  const cn=cross(rx,ry,nx,ny);
+  let w=p.inv+b.invMass+b.invI*cn*cn;
+  if(w < 1e-9) return;
+  const vn=dot(rvx,rvy,nx,ny);
+  let j=0;
+  if(vn < .4){
+    j=-(1+e)*vn/w;
+    if(j>0){
+      p.vx += nx*j*p.inv; p.vy += ny*j*p.inv;
+      applyVelImpulse(b,px,py,-nx*j,-ny*j);
+    }
+  }
+  const tx=-ny, ty=nx;
+  const vb2=pointVel(b,px,py);
+  rvx=p.vx-vb2.x; rvy=p.vy-vb2.y;
+  const vt=dot(rvx,rvy,tx,ty);
+  const ct=cross(rx,ry,tx,ty);
+  w=p.inv+b.invMass+b.invI*ct*ct;
+  if(w < 1e-9) return;
+  let jt=-vt/w;
+  jt=clamp(jt,-mu*(j+5),mu*(j+5));
+  p.vx += tx*jt*p.inv; p.vy += ty*jt*p.inv;
+  applyVelImpulse(b,px,py,-tx*jt,-ty*jt);
+}
+
+function solveVelocityContacts(){
+  for(const p of particles){
+    if(!p.collide) continue;
+    if(p.y+p.r >= bounds.floor-.8 && p.vy>0){ p.vy *= -.035; p.vx *= .80; }
+    if(p.x-p.r <= bounds.left+.8 && p.vx<0){ p.vx *= -.08; p.vy *= .94; }
+    if(p.x+p.r >= bounds.right-.8 && p.vx>0){ p.vx *= -.08; p.vy *= .94; }
+    if(p.y-p.r <= bounds.ceiling+.8 && p.vy<0){ p.vy *= -.08; }
+  }
+  for(const b of rigids){
+    const vs=getVerts(b);
+    for(const p of vs){
+      if(p.y >= bounds.floor-.6) velocityBodyPlane(b,0,-1,p.x,p.y,.92,.015);
+      if(p.x <= bounds.left+.6) velocityBodyPlane(b,1,0,p.x,p.y,.62,.02);
+      if(p.x >= bounds.right-.6) velocityBodyPlane(b,-1,0,p.x,p.y,.62,.02);
+      if(p.y <= bounds.ceiling+.6) velocityBodyPlane(b,0,1,p.x,p.y,.4,.02);
+    }
+  }
+  const colliders=particles.filter(p=>p.collide);
+  for(let i=0;i<colliders.length;i++){
+    const a=colliders[i];
+    for(let j=i+1;j<colliders.length;j++){
+      const b=colliders[j];
+      if(a.blob && a.blob === b.blob) continue;
+      const dx=b.x-a.x, dy=b.y-a.y, rr=a.r+b.r+.5, d2=dx*dx+dy*dy;
+      if(d2<rr*rr && d2>1e-8){
+        const d=Math.sqrt(d2), nx=dx/d, ny=dy/d;
+        const w=a.inv+b.inv; if(!w) continue;
+        const vn=dot(b.vx-a.vx,b.vy-a.vy,nx,ny);
+        if(vn<0){
+          const jj=-(1.08)*vn/w;
+          a.vx-=nx*jj*a.inv; a.vy-=ny*jj*a.inv;
+          b.vx+=nx*jj*b.inv; b.vy+=ny*jj*b.inv;
+        }
+      }
+    }
+  }
+  for(const p of colliders){
+    for(const b of rigids){
+      const info=particleRigidInfo(p,b,.75);
+      if(info) velocityParticleRigid(p,b,info.nx,info.ny,info.px,info.py,.56,.04);
+    }
+  }
+  for(let i=0;i<rigids.length;i++){
+    for(let j=i+1;j<rigids.length;j++){
+      const A=rigids[i], B=rigids[j];
+      if(A.group && A.group===B.group) continue;
+      const m=sat(A,B); if(!m) continue;
+      const pts=contactPoints(A,B,m.nx,m.ny);
+      for(const p of pts) velocityRigidRigid(A,B,m.nx,m.ny,p.x,p.y,.78,.025);
+    }
+  }
+}
+
+function step(dt){
+  const h=dt/SUBSTEPS;
+  for(let s=0;s<SUBSTEPS;s++){
+    simTime += h;
+    preStep(h);
+    for(let i=0;i<ITERS;i++) solvePositions(i);
+    updateVelocities(h);
+    solveVelocityContacts();
+  }
+}
+
+function impactAt(x,y,nx,ny,speed){
+  if(simTime-lastDustTime < .018 && speed < 620) return;
+  lastDustTime = simTime;
+  const count = clamp(Math.floor(speed/70), 4, 18);
+  const tx=-ny, ty=nx;
+  for(let i=0;i<count && dust.length<260;i++){
+    const s = (40+Math.random()*170) * (speed/520);
+    const side=(Math.random()-.5)*2;
+    dust.push({
+      x:x+(Math.random()-.5)*10, y:y+(Math.random()-.5)*10,
+      vx:nx*s*(.25+Math.random()*.65)+tx*side*s*.75,
+      vy:ny*s*(.25+Math.random()*.65)+ty*side*s*.75 - Math.random()*50,
+      life:.45+Math.random()*.45,
+      max:0,
+      r:1.5+Math.random()*3.8,
+      c:Math.random()<.55 ? 'rgba(217,199,170,' : 'rgba(163,177,198,'
+    });
+    dust[dust.length-1].max=dust[dust.length-1].life;
+  }
+  if(speed>380) shake = Math.min(18, shake + (speed-330)/105);
+}
+
+function addJelly(x,y,R,color){
+  const palette=['#63e6ff','#ff5fc8','#9dff72','#ffd166','#b084ff','#58f29d'];
+  return new SoftBlob(
+    x ?? (bounds.left+120+Math.random()*(W*.42)),
+    y ?? (bounds.ceiling+90+Math.random()*70),
+    R ?? (36+Math.random()*14),
+    color ?? palette[Math.floor(Math.random()*palette.length)]
+  );
+}
+
+function addRigid(x,y,w,h,m,kind,color,a=0){
+  return new Rigid(x,y,w,h,m,kind,color,a);
+}
+
+function createRagdoll(cx,cy){
+  const group='rag'+(++ragId);
+  const cloth = '#6b7cff';
+  const skin = '#ffc6a7';
+  const torso=addRigid(cx,cy,44,80,3.2,'torso','#5464da',0);
+  const head=addRigid(cx,cy-64,36,36,1.05,'head',skin,0);
+  const la=addRigid(cx-45,cy-4,23,76,1.25,'limb',cloth,.16);
+  const ra=addRigid(cx+45,cy-4,23,76,1.25,'limb',cloth,-.16);
+  const ll=addRigid(cx-17,cy+78,25,86,1.65,'limb','#4857bf',-.08);
+  const rl=addRigid(cx+17,cy+78,25,86,1.65,'limb','#4857bf',.08);
+  for(const b of [torso,head,la,ra,ll,rl]) b.group=group;
+
+  joints.push(new Joint(torso,0,-42, head,0,18,.78));
+  joints.push(new Joint(torso,-24,-25, la,0,-38,.76));
+  joints.push(new Joint(torso, 24,-25, ra,0,-38,.76));
+  joints.push(new Joint(torso,-14, 41, ll,0,-43,.78));
+  joints.push(new Joint(torso, 14, 41, rl,0,-43,.78));
+
+  angleLimits.push(new AngleLimit(torso,head,head.a-torso.a,-.58,.58,.32));
+  angleLimits.push(new AngleLimit(torso,la,la.a-torso.a,-1.35,1.25,.24));
+  angleLimits.push(new AngleLimit(torso,ra,ra.a-torso.a,-1.25,1.35,.24));
+  angleLimits.push(new AngleLimit(torso,ll,ll.a-torso.a,-.82,.72,.28));
+  angleLimits.push(new AngleLimit(torso,rl,rl.a-torso.a,-.72,.82,.28));
+
+  return [torso,head,la,ra,ll,rl];
+}
+
+function rebuildWall(){
+  if(grab && grab.type==='rigid' && grab.body.kind==='brick') grab=null;
+  rigids = rigids.filter(b=>b.kind!=='brick');
+  const bw=58, bh=26, rows=7, cols=5;
+  const totalW=cols*bw+(cols-1)*2;
+  let startX=clamp(W*.72, bounds.left+totalW/2+40, bounds.right-totalW/2-20);
+  for(let r=0;r<rows;r++){
+    const count = cols - (r===rows-1 ? 1 : 0);
+    const rowW=count*bw+(count-1)*2;
+    const offset = (r%2 ? bw*.5 : 0);
+    for(let c=0;c<count;c++){
+      const x=startX-rowW/2+bw/2+c*(bw+2)+offset*.18;
+      const y=bounds.floor-bh/2-r*(bh+1.5);
+      const brick=addRigid(x,y,bw,bh,2.4,'brick','#b76548',(Math.random()-.5)*.015);
+      brick.vx=brick.vy=brick.angVel=0;
+    }
+  }
+}
+
+function reset(){
+  particles=[]; softBodies=[]; rigids=[]; joints=[]; angleLimits=[]; dust=[]; grab=null; shake=0;
+  addJelly(bounds.left+170,bounds.floor-250,45,'#5fe7ff');
+  addJelly(bounds.left+300,bounds.floor-360,39,'#ff65c8');
+  addJelly(bounds.left+420,bounds.floor-220,50,'#95ff6a');
+  createRagdoll(bounds.left+470,bounds.floor-430);
+  rebuildWall();
+  updateStats();
+}
+
+function updateStats(){
+  bodiesEl.textContent = String(rigids.length + softBodies.length);
+  partsEl.textContent = String(particles.length);
+}
+
+function pointerPos(e){
+  const rect=canvas.getBoundingClientRect();
+  const t=e.touches ? e.touches[0] : e;
+  return {x:t.clientX-rect.left, y:t.clientY-rect.top};
+}
+function pointerDown(e){
+  e.preventDefault();
+  const p=pointerPos(e);
+  mouse.down=true; mouse.x=mouse.px=p.x; mouse.y=mouse.py=p.y; mouse.vx=mouse.vy=0; mouse.lastT=performance.now();
+
+  for(let i=rigids.length-1;i>=0;i--){
+    const b=rigids[i];
+    if(pointInBody(p.x,p.y,b,4)){
+      const lp=localPoint(b,p.x,p.y);
+      grab={type:'rigid',body:b,lx:lp.x,ly:lp.y};
+      return;
+    }
+  }
+
+  let bestBlob=null, bestD=Infinity, bestP=null;
+  for(const blob of softBodies){
+    if(pointInPoly(p.x,p.y,blob.ring)){
+      bestBlob=blob; bestD=0; break;
+    }
+    for(const q of blob.ring){
+      const d=hypot(q.x-p.x,q.y-p.y);
+      if(d<bestD){bestD=d; bestBlob=blob; bestP=q;}
+    }
+  }
+  if(bestBlob && bestD < bestBlob.R*1.45){
+    const items=[];
+    const near = bestP || bestBlob.ring.reduce((a,b)=>hypot(b.x-p.x,b.y-p.y)<hypot(a.x-p.x,a.y-p.y)?b:a,bestBlob.ring[0]);
+    for(const q of bestBlob.particles){
+      const d=hypot(q.x-near.x,q.y-near.y);
+      const w=.16 + .94*Math.exp(-(d*d)/(bestBlob.R*bestBlob.R*.95));
+      items.push({p:q, ox:q.x-p.x, oy:q.y-p.y, w:clamp(w,.12,1)});
+    }
+    grab={type:'soft',blob:bestBlob,items};
+  }
+}
+function pointerMove(e){
+  const p=pointerPos(e);
+  const now=performance.now();
+  const dt=Math.max(1, now-mouse.lastT)/1000;
+  const vx=(p.x-mouse.x)/dt, vy=(p.y-mouse.y)/dt;
+  mouse.vx=mouse.vx*.35+vx*.65;
+  mouse.vy=mouse.vy*.35+vy*.65;
+  mouse.px=mouse.x; mouse.py=mouse.y; mouse.x=p.x; mouse.y=p.y; mouse.lastT=now;
+}
+function pointerUp(){
+  if(grab){
+    if(grab.type==='rigid'){
+      const b=grab.body;
+      b.vx = clamp(b.vx*.35 + mouse.vx*.75, -MAX_V, MAX_V);
+      b.vy = clamp(b.vy*.35 + mouse.vy*.75, -MAX_V, MAX_V);
+      const ap=worldPoint(b,grab.lx,grab.ly);
+      const rx=ap.x-b.x, ry=ap.y-b.y;
+      b.angVel += clamp(cross(rx,ry,mouse.vx,mouse.vy)/(b.radius*b.radius+80),-10,10);
+    }else{
+      for(const it of grab.items){
+        it.p.vx += mouse.vx * (.18 + it.w*.42);
+        it.p.vy += mouse.vy * (.18 + it.w*.42);
+      }
+    }
+  }
+  grab=null; mouse.down=false;
+}
+canvas.addEventListener('mousedown', pointerDown);
+addEventListener('mousemove', pointerMove);
+addEventListener('mouseup', pointerUp);
+canvas.addEventListener('touchstart', pointerDown, {passive:false});
+addEventListener('touchmove', pointerMove, {passive:false});
+addEventListener('touchend', pointerUp);
+
+function pointInPoly(x,y,pts){
+  let inside=false;
+  for(let i=0,j=pts.length-1;i<pts.length;j=i++){
+    const xi=pts[i].x, yi=pts[i].y, xj=pts[j].x, yj=pts[j].y;
+    const intersect=((yi>y)!==(yj>y)) && (x < (xj-xi)*(y-yi)/(yj-yi+1e-9)+xi);
+    if(intersect) inside=!inside;
+  }
+  return inside;
+}
+
+function updateDust(dt){
+  for(let i=dust.length-1;i>=0;i--){
+    const d=dust[i];
+    d.life -= dt;
+    if(d.life<=0){ dust.splice(i,1); continue; }
+    d.vy += gravity*.18*dt;
+    d.vx *= Math.pow(.28,dt);
+    d.x += d.vx*dt; d.y += d.vy*dt;
+  }
+}
+
+function roundRectPath(x,y,w,h,r){
+  r=Math.min(r,w/2,h/2);
+  ctx.beginPath();
+  ctx.moveTo(x+r,y);
+  ctx.arcTo(x+w,y,x+w,y+h,r);
+  ctx.arcTo(x+w,y+h,x,y+h,r);
+  ctx.arcTo(x,y+h,x,y,r);
+  ctx.arcTo(x,y,x+w,y,r);
+  ctx.closePath();
+}
+
+function capsulePath(w,h){
+  const r=Math.min(w/2,h/2);
+  ctx.beginPath();
+  ctx.moveTo(-w/2,-h/2+r);
+  ctx.arc(0,-h/2+r,r,Math.PI,0);
+  ctx.lineTo(w/2,h/2-r);
+  ctx.arc(0,h/2-r,r,0,Math.PI);
+  ctx.closePath();
+}
+
+function blobPath(blob){
+  const pts=blob.ring, n=pts.length;
+  const last=pts[n-1], first=pts[0];
+  ctx.beginPath();
+  ctx.moveTo((last.x+first.x)/2,(last.y+first.y)/2);
+  for(let i=0;i<n;i++){
+    const p=pts[i], q=pts[(i+1)%n];
+    ctx.quadraticCurveTo(p.x,p.y,(p.x+q.x)/2,(p.y+q.y)/2);
+  }
+  ctx.closePath();
+}
+
+function drawBackground(){
+  const bg=ctx.createLinearGradient(0,0,0,H);
+  bg.addColorStop(0,'#081022');
+  bg.addColorStop(.55,'#121936');
+  bg.addColorStop(1,'#090d18');
+  ctx.fillStyle=bg;
+  ctx.fillRect(0,0,W,H);
+
+  let glow=ctx.createRadialGradient(W*.24,H*.18,20,W*.24,H*.18,W*.75);
+  glow.addColorStop(0,'rgba(92,139,255,.24)');
+  glow.addColorStop(.45,'rgba(66,206,255,.08)');
+  glow.addColorStop(1,'rgba(0,0,0,0)');
+  ctx.fillStyle=glow; ctx.fillRect(0,0,W,H);
+
+  glow=ctx.createRadialGradient(W*.78,H*.22,20,W*.78,H*.22,W*.55);
+  glow.addColorStop(0,'rgba(154,124,255,.16)');
+  glow.addColorStop(1,'rgba(0,0,0,0)');
+  ctx.fillStyle=glow; ctx.fillRect(0,0,W,H);
+
+  ctx.save();
+  ctx.globalAlpha=.16;
+  ctx.strokeStyle='rgba(255,255,255,.14)';
+  ctx.lineWidth=1;
+  for(let x=bounds.left;x<=bounds.right;x+=48){
+    ctx.beginPath(); ctx.moveTo(x,bounds.ceiling); ctx.lineTo(x,bounds.floor); ctx.stroke();
+  }
+  ctx.globalAlpha=.10;
+  for(let y=bounds.ceiling;y<=bounds.floor;y+=48){
+    ctx.beginPath(); ctx.moveTo(bounds.left,y); ctx.lineTo(bounds.right,y); ctx.stroke();
+  }
+  ctx.restore();
+
+  const floor=ctx.createLinearGradient(0,bounds.floor,0,H);
+  floor.addColorStop(0,'rgba(255,255,255,.18)');
+  floor.addColorStop(.06,'rgba(120,243,255,.07)');
+  floor.addColorStop(1,'rgba(0,0,0,.22)');
+  ctx.fillStyle=floor;
+  ctx.fillRect(bounds.left,bounds.floor,bounds.right-bounds.left,H-bounds.floor);
+  ctx.strokeStyle='rgba(215,240,255,.38)';
+  ctx.lineWidth=2;
+  ctx.beginPath(); ctx.moveTo(bounds.left,bounds.floor); ctx.lineTo(bounds.right,bounds.floor); ctx.stroke();
+
+  const vign=ctx.createRadialGradient(W/2,H*.45,Math.min(W,H)*.15,W/2,H*.45,Math.max(W,H)*.72);
+  vign.addColorStop(0,'rgba(0,0,0,0)');
+  vign.addColorStop(1,'rgba(0,0,0,.54)');
+  ctx.fillStyle=vign; ctx.fillRect(0,0,W,H);
+}
+
+function drawBlob(blob){
+  const c=blob.centroid();
+  let avg=0; for(const p of blob.ring) avg += hypot(p.x-c.x,p.y-c.y); avg/=blob.ring.length;
+
+  ctx.save();
+  ctx.shadowColor='rgba(0,0,0,.42)';
+  ctx.shadowBlur=20;
+  ctx.shadowOffsetY=13;
+
+  blobPath(blob);
+  const grad=ctx.createRadialGradient(c.x-avg*.38,c.y-avg*.45,avg*.1,c.x,c.y,avg*1.32);
+  grad.addColorStop(0,'rgba(255,255,255,.96)');
+  grad.addColorStop(.16,shade(blob.color,.38));
+  grad.addColorStop(.55,blob.color);
+  grad.addColorStop(1,shade(blob.color,-.34));
+  ctx.fillStyle=grad;
+  ctx.fill();
+
+  ctx.shadowColor='transparent';
+  ctx.lineWidth=2.2;
+  ctx.strokeStyle='rgba(255,255,255,.42)';
+  ctx.stroke();
+
+  ctx.save();
+  blobPath(blob);
+  ctx.clip();
+  ctx.globalAlpha=.22;
+  ctx.fillStyle='white';
+  ctx.beginPath();
+  ctx.ellipse(c.x-avg*.27,c.y-avg*.38,avg*.34,avg*.13,-.42,0,Math.PI*2);
+  ctx.fill();
+  ctx.globalAlpha=.13;
+  ctx.strokeStyle='rgba(255,255,255,.9)';
+  ctx.lineWidth=1;
+  for(const s of blob.springs){
+    if(s.stiff>.5){
+      ctx.beginPath(); ctx.moveTo(s.a.x,s.a.y); ctx.lineTo(s.b.x,s.b.y); ctx.stroke();
+    }
+  }
+  ctx.restore();
+  ctx.restore();
+}
+
+function drawRigid(b){
+  ctx.save();
+  ctx.translate(b.x,b.y); ctx.rotate(b.a);
+  if(b.kind==='brick'){
+    ctx.shadowColor='rgba(0,0,0,.36)';
+    ctx.shadowBlur=12; ctx.shadowOffsetY=7;
+    roundRectPath(-b.hw,-b.hh,b.w,b.h,5);
+    const grad=ctx.createLinearGradient(0,-b.hh,0,b.hh);
+    grad.addColorStop(0,shade(b.color,.22));
+    grad.addColorStop(.55,b.color);
+    grad.addColorStop(1,shade(b.color,-.25));
+    ctx.fillStyle=grad; ctx.fill();
+    ctx.shadowColor='transparent';
+    ctx.strokeStyle='rgba(55,28,22,.32)'; ctx.lineWidth=1.2; ctx.stroke();
+    ctx.strokeStyle='rgba(255,230,205,.18)'; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(-b.hw+7,-b.hh+5); ctx.lineTo(b.hw-7,-b.hh+5); ctx.stroke();
+    ctx.strokeStyle='rgba(80,38,27,.34)';
+    for(const ch of b.chips){
+      ctx.save(); ctx.translate(ch.x,ch.y); ctx.rotate(ch.a);
+      ctx.beginPath(); ctx.moveTo(-ch.l/2,0); ctx.lineTo(ch.l/2,0); ctx.stroke();
+      ctx.restore();
+    }
+  } else if(b.kind==='head'){
+    ctx.shadowColor='rgba(0,0,0,.34)'; ctx.shadowBlur=14; ctx.shadowOffsetY=7;
+    ctx.beginPath(); ctx.ellipse(0,0,b.hw,b.hh,0,0,Math.PI*2);
+    const grad=ctx.createRadialGradient(-b.hw*.3,-b.hh*.4,2,0,0,b.hw*1.2);
+    grad.addColorStop(0,'#fff2dc'); grad.addColorStop(.55,b.color); grad.addColorStop(1,'#d99678');
+    ctx.fillStyle=grad; ctx.fill();
+    ctx.shadowColor='transparent';
+    ctx.strokeStyle='rgba(80,45,50,.25)'; ctx.lineWidth=1.3; ctx.stroke();
+    ctx.fillStyle='rgba(55,47,64,.7)';
+    ctx.beginPath(); ctx.arc(-6,-3,1.7,0,Math.PI*2); ctx.arc(6,-3,1.7,0,Math.PI*2); ctx.fill();
+  } else {
+    const isTorso=b.kind==='torso';
+    ctx.shadowColor='rgba(0,0,0,.35)'; ctx.shadowBlur=15; ctx.shadowOffsetY=8;
+    if(isTorso) roundRectPath(-b.hw,-b.hh,b.w,b.h,13);
+    else capsulePath(b.w,b.h);
+    const grad=ctx.createLinearGradient(-b.hw,-b.hh,b.hw,b.hh);
+    grad.addColorStop(0,shade(b.color,.28));
+    grad.addColorStop(.58,b.color);
+    grad.addColorStop(1,shade(b.color,-.28));
+    ctx.fillStyle=grad; ctx.fill();
+    ctx.shadowColor='transparent';
+    ctx.strokeStyle='rgba(255,255,255,.18)'; ctx.lineWidth=1.5; ctx.stroke();
+
+    ctx.save();
+    ctx.globalAlpha=.12;
+    ctx.strokeStyle='white'; ctx.lineWidth=1;
+    for(let y=-b.hh+10;y<b.hh;y+=10){
+      ctx.beginPath(); ctx.moveTo(-b.hw+5,y); ctx.lineTo(b.hw-5,y+3); ctx.stroke();
+    }
+    ctx.restore();
+  }
+  ctx.restore();
+}
+
+function drawDust(){
+  ctx.save();
+  ctx.globalCompositeOperation='lighter';
+  for(const d of dust){
+    const a=Math.max(0,d.life/d.max);
+    ctx.fillStyle=d.c+(a*.38)+')';
+    ctx.beginPath();
+    ctx.arc(d.x,d.y,d.r*(.6+1.2*(1-a)),0,Math.PI*2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+function render(){
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+  ctx.clearRect(0,0,W,H);
+
+  const sx=(Math.random()-.5)*shake, sy=(Math.random()-.5)*shake;
+  ctx.save(); ctx.translate(sx,sy);
+
+  drawBackground();
+
+  const bricks=rigids.filter(b=>b.kind==='brick');
+  const others=rigids.filter(b=>b.kind!=='brick');
+
+  for(const b of bricks) drawRigid(b);
+  for(const blob of softBodies) drawBlob(blob);
+  for(const b of others) drawRigid(b);
+
+  if(grab){
+    ctx.save();
+    ctx.strokeStyle='rgba(120,243,255,.38)';
+    ctx.lineWidth=2;
+    ctx.setLineDash([7,7]);
+    if(grab.type==='rigid'){
+      const p=worldPoint(grab.body,grab.lx,grab.ly);
+      ctx.beginPath(); ctx.moveTo(mouse.x,mouse.y); ctx.lineTo(p.x,p.y); ctx.stroke();
+      ctx.fillStyle='rgba(120,243,255,.8)';
+      ctx.beginPath(); ctx.arc(mouse.x,mouse.y,5,0,Math.PI*2); ctx.fill();
+    }else{
+      const p=grab.items[0].p;
+      ctx.beginPath(); ctx.moveTo(mouse.x,mouse.y); ctx.lineTo(p.x,p.y); ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  drawDust();
+  ctx.restore();
+  shake *= .88;
+  if(shake < .05) shake=0;
+}
+
+function frame(now){
+  const realDt=Math.min(.05,(now-lastRAF)/1000);
+  lastRAF=now;
+  fpsEMA = fpsEMA*.92 + (1/Math.max(realDt,1e-4))*.08;
+  accumulator += realDt;
+  let loops=0;
+  while(accumulator >= fixedDt && loops < 3){
+    step(fixedDt);
+    accumulator -= fixedDt;
+    loops++;
+  }
+  if(loops===3) accumulator=0;
+  updateDust(realDt);
+  render();
+
+  if((now|0)%250 < 17){
+    fpsEl.textContent=String(Math.round(fpsEMA));
+    updateStats();
+  }
+  requestAnimationFrame(frame);
+}
+
+gInput.addEventListener('input', () => {
+  gravity = Number(gInput.value);
+  gVal.textContent = String(gravity);
+});
+document.getElementById('addJelly').addEventListener('click', () => { addJelly(); updateStats(); });
+document.getElementById('dropRag').addEventListener('click', () => {
+  createRagdoll(clamp(W*.34+Math.random()*120,bounds.left+120,bounds.right-320), bounds.ceiling+145);
+  updateStats();
+});
+document.getElementById('rebuild').addEventListener('click', () => { rebuildWall(); updateStats(); });
+document.getElementById('reset').addEventListener('click', reset);
+
+resize();
+reset();
+requestAnimationFrame(frame);
+
+})();
+</script>
+</body>
+</html>
