@@ -38,9 +38,9 @@
   </div>
   <div class="grid">
     <a class="card" href="./fusion/"><span class="tag">fusion</span><h2>Fusion</h2><p>Opus-4.8 ∥ GPT-5.5, реконсайл лучшего из двух. Headless-проверен.</p></a>
-    <a class="card" href="./fugu/"><span class="tag">fugu</span><h2>Sakana Fugu</h2><p>Базовая модель, reasoning high.</p></a>
+    <a class="card" href="./fugu/"><span class="tag">fugu</span><h2>Sakana Fugu</h2><p>Базовая модель @ high. Запускается без ошибок в консоли, но кадр уходит в белизну (баг тонмаппинга/bloom) — не чёрная дыра.</p></a>
     <a class="card pending"><span class="tag">скоро</span><h2>Fugu Ultra</h2><p>fugu-ultra @ xhigh, non-stream — оркестрирует фронтир-модели, едет долго.</p></a>
-    <a class="card" href="./glm/"><span class="tag">glm</span><h2>GLM-5.2</h2><p>Zhipu GLM-5.2 (756B) @ High effort. Max-уровень уходит в бесконечный reasoning — High даёт готовый файл.</p></a>
+    <a class="card" href="./glm/"><span class="tag">glm</span><h2>GLM-5.2</h2><p>756B @ High (Max = бесконечный reasoning, 0 вывода). Raw-файл не компилировался из-за 1 символа (<code>float(i) &gt; 12</code> → <code>12.0</code>); починил — теперь полноценная Гаргантюа.</p></a>
   </div>
   <footer>Каждый рендер — один CDN-only HTML-файл. Открой и сравни: линзирование, диск, кольцо, панель, FPS.</footer>
 </div>
